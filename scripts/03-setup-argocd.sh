@@ -142,6 +142,38 @@ else
     git commit -m "Update ArgoCD configuration" || echo "No hay cambios para commitear"
 fi
 
+# Asegurar que la aplicación base esté desplegada
+echo "Verificando archivos de Istio..."
+echo "=== ARCHIVOS EN DIRECTORIO ISTIO ==="
+ls -la istio/
+
+echo ""
+echo "Desplegando aplicación base directamente (sin ArgoCD)..."
+
+# Verificar cada archivo antes de aplicarlo
+for file in istio/01-production-deployment-istio.yaml istio/02-service-unified.yaml istio/03-destination-rule.yaml istio/04-virtual-service.yaml; do
+    if [ -f "$file" ]; then
+        echo "✅ Aplicando $file"
+        kubectl apply -f "$file"
+    else
+        echo "❌ Archivo no encontrado: $file"
+    fi
+done
+
+# Esperar que esté listo
+echo "Esperando que la aplicación esté lista..."
+kubectl wait --for=condition=available deployment/demo-microservice-production-istio --timeout=300s || echo "⚠️  Timeout esperando deployment"
+
+echo "✅ Aplicación base desplegada"
+
+echo ""
+echo "=== VERIFICANDO PODS DESPLEGADOS ==="
+kubectl get pods -l app=demo-microservice-istio
+
+echo ""
+echo "=== VERIFICANDO DEPLOYMENTS ==="
+kubectl get deployments -l app=demo-microservice-istio
+
 # Configurar ArgoCD para permitir repositorios locales
 echo "Configurando ArgoCD para repositorios locales..."
 kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge -p='{"data":{"reposerver.enable.git.submodule":"true","reposerver.git.request.timeout":"60"}}'
@@ -211,6 +243,26 @@ sleep 15
 
 # Aplicar configuraciones
 kubectl apply -f argocd-manifests/
+
+# Verificar el estado de la aplicación con logs detallados
+echo "Verificando estado de la aplicación en ArgoCD..."
+sleep 10
+
+# Obtener logs detallados de ArgoCD
+echo "=== LOGS DE ARGOCD REPO-SERVER ==="
+kubectl logs -n argocd deployment/argocd-repo-server --tail=20
+
+echo ""
+echo "=== ESTADO DE LA APLICACIÓN ==="
+kubectl get application demo-microservice-istio -n argocd -o yaml
+
+echo ""
+echo "=== VERIFICANDO ARCHIVOS EN EL REPOSITORIO ==="
+ls -la istio/
+
+# Forzar sincronización inmediata
+echo "Forzando sincronización de la aplicación..."
+kubectl patch application demo-microservice-istio -n argocd --type='merge' -p='{"operation":{"sync":{"revision":"HEAD"}}}'
 
 echo "✅ Aplicaciones configuradas en ArgoCD"
 
