@@ -191,17 +191,11 @@ kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge -p='{"data":
 kubectl rollout restart deployment/argocd-repo-server -n argocd
 sleep 10
 
-# Limpiar recursos huérfanos que causan problemas de sincronización
-echo "Limpiando recursos huérfanos..."
-kubectl delete rollout demo-microservice-rollout-istio --ignore-not-found=true
-kubectl delete analysistemplate success-rate-analysis-istio --ignore-not-found=true
-
-# Eliminar aplicaciones problemáticas
+# Eliminar solo la aplicación del experimento (no debe estar en ArgoCD)
 kubectl delete application demo-microservice-experiment -n argocd --ignore-not-found=true
-kubectl delete application demo-microservice-istio -n argocd --ignore-not-found=true
 
-# Crear Application limpia con auto-sync y prune habilitado
-cat > argocd-manifests/demo-microservice-app.yaml << EOF
+# Crear Application simple que funcione (SIN argocd-manifests)
+cat > /tmp/demo-microservice-app.yaml << EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -210,49 +204,20 @@ metadata:
   labels:
     app: demo-microservice
 spec:
-  project: demo-project
+  project: default
   source:
     repoURL: 'https://github.com/Adan2804/demo-microservice.git'
     path: istio
     targetRevision: HEAD
-    directory:
-      include: '01-production-deployment-istio.yaml,02-service-unified.yaml,03-destination-rule.yaml,04-virtual-service.yaml'
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
     syncOptions:
     - CreateNamespace=true
-    - PrunePropagationPolicy=foreground
 EOF
 
-# Crear proyecto personalizado para permitir repositorios locales
-cat > argocd-manifests/demo-project.yaml << EOF
-apiVersion: argoproj.io/v1alpha1
-kind: AppProject
-metadata:
-  name: demo-project
-  namespace: argocd
-spec:
-  description: 'Proyecto para repositorios locales'
-  sourceRepos:
-  - 'file://*'
-  - '*'
-  destinations:
-  - namespace: '*'
-    server: 'https://kubernetes.default.svc'
-  clusterResourceWhitelist:
-  - group: '*'
-    kind: '*'
-  namespaceResourceWhitelist:
-  - group: '*'
-    kind: '*'
-EOF
-
-echo "✅ Configuraciones creadas en argocd-manifests/"
+echo "✅ Configuraciones creadas"
 
 # 6. APLICAR CONFIGURACIONES A ARGOCD
 echo ""
@@ -262,20 +227,16 @@ echo "🚀 APLICANDO CONFIGURACIONES A ARGOCD..."
 echo "Esperando que ArgoCD esté completamente operativo..."
 sleep 15
 
-# Aplicar configuraciones
-kubectl apply -f argocd-manifests/
+# Aplicar configuración temporal
+kubectl apply -f /tmp/demo-microservice-app.yaml
 
-# Esperar que la aplicación se cree
-echo "Esperando que la aplicación se cree..."
+# Verificar el estado de la aplicación con logs detallados
+echo "Verificando estado de la aplicación en ArgoCD..."
 sleep 10
 
-# Forzar sincronización limpia con prune
-echo "Forzando sincronización limpia..."
-kubectl patch application demo-microservice-istio -n argocd --type='merge' -p='{"operation":{"sync":{"revision":"HEAD","prune":true}}}'
-
-# Esperar sincronización
-echo "Esperando sincronización..."
-sleep 15
+# Forzar sincronización inmediata
+echo "Forzando sincronización de la aplicación..."
+kubectl patch application demo-microservice-istio -n argocd --type='merge' -p='{"operation":{"sync":{"revision":"HEAD"}}}'
 
 echo "✅ Aplicaciones configuradas en ArgoCD"
 
@@ -364,7 +325,6 @@ echo "• Iniciar ArgoCD: ./scripts/start-argocd.sh"
 echo "• Detener ArgoCD: ./scripts/stop-argocd.sh"
 echo ""
 echo "📁 ARCHIVOS CREADOS:"
-echo "• argocd-manifests/ - Configuraciones de ArgoCD"
 echo "• scripts/start-argocd.sh - Iniciar dashboard"
 echo "• scripts/stop-argocd.sh - Detener dashboard"
 echo ""
