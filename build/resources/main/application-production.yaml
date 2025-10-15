@@ -1,0 +1,17 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: demo-microservice
+
+# Configuración de producción
+logging:
+  level:
+    root: INFO
+    com.example.demo: INFO
+
+demo:
+  environment: production
+  feature-flags:
+    enabled: true

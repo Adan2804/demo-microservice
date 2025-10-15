@@ -1,0 +1,24 @@
+# Task para actualizar producción - Simula lo que hace Azure DevOps
+# kubectl apply -f k8s/task-update-production.yaml
+
+# Patch para actualizar producción
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-production
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+      - name: demo-microservice
+        image: demo-microservice:stable  # Azure DevOps cambiaría esta imagen
+        env:
+        - name: PORT
+          value: "3000"
+        - name: APP_VERSION
+          value: "production-v1.2.0-release"  # Nueva versión en producción
+        - name: ENVIRONMENT
+          value: "production"
+        - name: EXPERIMENT_ENABLED
+          value: "false"

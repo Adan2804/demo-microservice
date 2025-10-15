@@ -1,0 +1,59 @@
+# Servicios para Argo Rollouts BlueGreen
+# Servicio activo - Recibe todo el tráfico de producción
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-active
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: active
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+  type: LoadBalancer
+
+---
+# Servicio preview - Para validación antes de promoción
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-preview
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: preview
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+  type: ClusterIP
+
+---
+# Servicio principal (para acceso externo unificado)
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: main
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+  type: LoadBalancer

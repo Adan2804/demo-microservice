@@ -1,0 +1,40 @@
+# Servicio para pods baseline del experimento
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-experiment-baseline
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: experiment-baseline
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    experiment-role: baseline
+  type: ClusterIP
+
+---
+# Servicio para pod canary del experimento
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-experiment-canary
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: experiment-canary
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    experiment-role: canary
+  type: ClusterIP

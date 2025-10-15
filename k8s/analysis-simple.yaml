@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate-analysis
+  namespace: default
+spec:
+  args:
+  - name: service-name
+  metrics:
+  # Métrica simple de health check con count definido
+  - name: health-check
+    interval: 30s
+    count: 5  # Ejecutar 5 veces
+    successCondition: result == "1"
+    failureLimit: 3
+    provider:
+      web:
+        url: "http://{{args.service-name}}.default.svc.cluster.local/health"
+        headers:
+        - key: Content-Type
+          value: application/json
+        jsonPath: "{$.status}"

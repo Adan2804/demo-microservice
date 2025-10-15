@@ -1,0 +1,64 @@
+# Deployment de producción para Istio (independiente)
+# Copia de la configuración base pero con labels específicos para Istio
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-production-istio
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    tier: production
+    version: stable
+    managed-by: istio
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: demo-microservice-istio
+      tier: production
+  template:
+    metadata:
+      labels:
+        app: demo-microservice-istio
+        tier: production
+        traffic-type: production
+        version: stable
+        sidecar.istio.io/inject: "true"  # Inyección automática de Istio sidecar
+    spec:
+      containers:
+      - name: demo-microservice
+        image: demo-microservice:stable
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: PORT
+          value: "3000"
+        - name: APP_VERSION
+          value: "production-stable-istio"
+        - name: ENVIRONMENT
+          value: "production-istio"
+        - name: EXPERIMENT_ENABLED
+          value: "false"
+        - name: ISTIO_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10

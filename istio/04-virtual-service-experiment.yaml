@@ -1,0 +1,115 @@
+# VirtualService para Gateway con experimento activo
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-microservice-gateway-routing
+  namespace: default
+  labels:
+    experiment-active: "true"
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - demo-microservice-gateway
+  http:
+  # Regla 1: Tráfico con header de experimento va al subset experiment
+  - match:
+    - headers:
+        aws-cf-cd-super-svp-9f8b7a6d:
+          exact: "123e4567-e89b-12d3-a456-42661417400"
+    route:
+    - destination:
+        host: demo-microservice-istio.default.svc.cluster.local
+        subset: experiment
+      weight: 100
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 5ms
+    headers:
+      response:
+        add:
+          x-routed-to: "experiment-subset"
+          x-istio-routing: "header-based"
+          x-experiment-status: "active"
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+  
+  # Regla 2: Tráfico normal va al subset stable (producción)
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: demo-microservice-istio.default.svc.cluster.local
+        subset: stable
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "production-stable"
+          x-istio-routing: "gateway-experiment"
+          x-experiment-status: "active"
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 10s
+
+---
+# VirtualService para mesh interno con experimento activo
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-microservice-mesh-routing
+  namespace: default
+  labels:
+    experiment-active: "true"
+spec:
+  hosts:
+  - demo-microservice-istio.default.svc.cluster.local
+  gateways:
+  - mesh
+  http:
+  # Regla 1: Tráfico con header de experimento va al subset experiment
+  - match:
+    - headers:
+        aws-cf-cd-super-svp-9f8b7a6d:
+          exact: "123e4567-e89b-12d3-a456-42661417400"
+    route:
+    - destination:
+        host: demo-microservice-istio.default.svc.cluster.local
+        subset: experiment
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "experiment-subset"
+          x-istio-routing: "mesh-header-based"
+          x-experiment-status: "active"
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+  
+  # Regla 2: Tráfico normal va al subset stable (producción)
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: demo-microservice-istio.default.svc.cluster.local
+        subset: stable
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "production-stable"
+          x-istio-routing: "mesh-experiment"
+          x-experiment-status: "active"
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 10s

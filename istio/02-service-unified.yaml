@@ -1,0 +1,39 @@
+# Servicio unificado para Istio (independiente de la configuración original)
+# Un solo service que maneja tanto producción como experimento con Istio
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-istio
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    service: demo-microservice-istio
+    managed-by: istio
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice-istio  # Selector específico para pods Istio
+  type: ClusterIP
+
+---
+# Gateway para acceso externo (reemplaza LoadBalancer)
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: demo-microservice-gateway
+  namespace: default
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"

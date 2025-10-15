@@ -1,0 +1,113 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Experiment
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice
+spec:
+  duration: 4h
+  progressDeadlineSeconds: 14400
+  
+  templates:
+  # Template que usa el rollout existente como baseline
+  - name: baseline
+    replicas: 3
+    selector:
+      matchLabels:
+        app: demo-microservice
+        experiment-role: baseline
+    template:
+      metadata:
+        labels:
+          app: demo-microservice
+          experiment-role: baseline
+          traffic-type: active
+      spec:
+        containers:
+        - name: demo-microservice
+          image: demo-microservice:stable
+          ports:
+          - containerPort: 3000
+          env:
+          - name: PORT
+            value: "3000"
+          - name: APP_VERSION
+            value: "stable-v1.0.0"
+          - name: EXPERIMENT_ENABLED
+            value: "false"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+  # Template experimental
+  - name: canary
+    replicas: 1
+    selector:
+      matchLabels:
+        app: demo-microservice
+        experiment-role: canary
+    template:
+      metadata:
+        labels:
+          app: demo-microservice
+          experiment-role: canary
+          traffic-type: experimental
+      spec:
+        containers:
+        - name: demo-microservice
+          image: demo-microservice:experiment
+          ports:
+          - containerPort: 3000
+          env:
+          - name: PORT
+            value: "3000"
+          - name: APP_VERSION
+            value: "experiment-v1.1.0"
+          - name: EXPERIMENT_ENABLED
+            value: "true"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+  # Análisis del experimento
+  analyses:
+  - name: experiment-analysis
+    templateName: success-rate-analysis
+    args:
+    - name: baseline-service
+      value: demo-microservice-experiment-baseline
+    - name: canary-service
+      value: demo-microservice-experiment-canary

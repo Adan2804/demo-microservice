@@ -1,0 +1,139 @@
+# Proxy simple que funciona siempre - Desplegar segundo
+# kubectl apply -f k8s/02-proxy-simple.yaml
+
+# ConfigMap del proxy
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: production-proxy-config
+  namespace: default
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+    
+    http {
+        upstream production_backend {
+            server demo-microservice-production:80;
+        }
+        
+        # Upstream para experimento con fallback
+        upstream experiment_backend {
+            server demo-microservice-experiment:80 max_fails=1 fail_timeout=1s;
+            server demo-microservice-production:80 backup;
+        }
+        
+        server {
+            listen 8080;
+            location /health {
+                return 200 "proxy-healthy\n";
+                add_header Content-Type text/plain;
+            }
+        }
+        
+        server {
+            listen 80;
+            
+            location /proxy/health {
+                return 200 "production-proxy-ok\n";
+                add_header Content-Type text/plain;
+            }
+            
+            location /proxy/status {
+                return 200 "Production: OK\nExperiment: Auto-fallback\n";
+                add_header Content-Type text/plain;
+            }
+            
+            location / {
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                
+                # Si hay header de experimento, intentar experimento
+                if ($http_aws_cf_cd_super_svp_9f8b7a6d = "123e4567-e89b-12d3-a456-42661417400") {
+                    proxy_pass http://experiment_backend;
+                    add_header X-Routed-To "experiment-or-fallback" always;
+                    break;
+                }
+                
+                # Tráfico normal va a producción
+                proxy_pass http://production_backend;
+                add_header X-Routed-To "production" always;
+            }
+        }
+    }
+
+---
+# Deployment del proxy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: production-proxy
+  namespace: default
+  labels:
+    app: production-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: production-proxy
+  template:
+    metadata:
+      labels:
+        app: production-proxy
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        - containerPort: 8080
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: production-proxy-config
+
+---
+# Servicio del proxy
+apiVersion: v1
+kind: Service
+metadata:
+  name: production-proxy
+  namespace: default
+  labels:
+    app: production-proxy
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  - port: 8080
+    targetPort: 8080
+    name: health
+  selector:
+    app: production-proxy
+  type: LoadBalancer

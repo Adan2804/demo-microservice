@@ -1,0 +1,25 @@
+# Task para activar experimento - Simula task externo en Azure DevOps
+# kubectl apply -f k8s/task-activate-experiment.yaml
+
+# Patch para activar el experimento (1 pod)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+spec:
+  replicas: 1  # Activar experimento
+  template:
+    spec:
+      containers:
+      - name: demo-microservice
+        image: demo-microservice:experiment  # Cambiar por la imagen que quieras probar
+        env:
+        - name: PORT
+          value: "3000"
+        - name: APP_VERSION
+          value: "experiment-v1.2.0-candidate"  # Versión específica a probar
+        - name: ENVIRONMENT
+          value: "production-experiment"
+        - name: EXPERIMENT_ENABLED
+          value: "true"

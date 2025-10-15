@@ -1,0 +1,110 @@
+# VirtualService para Gateway (tráfico externo)
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-microservice-gateway-routing
+  namespace: default
+  labels:
+    experiment-active: "false"
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - demo-microservice-gateway
+  http:
+  # Todo el tráfico externo va a producción
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: demo-microservice-istio.default.svc.cluster.local
+        subset: stable
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "production-stable"
+          x-istio-routing: "gateway-config"
+          x-experiment-status: "not-active"
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 10s
+
+---
+# VirtualService para mesh interno
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-microservice-mesh-routing
+  namespace: default
+  labels:
+    experiment-active: "false"
+spec:
+  hosts:
+  - demo-microservice-istio.default.svc.cluster.local
+  gateways:
+  - mesh
+  http:
+  # Todo el tráfico interno va a producción
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: demo-microservice-istio.default.svc.cluster.local
+        subset: stable
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "production-stable"
+          x-istio-routing: "mesh-config"
+          x-experiment-status: "not-active"
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 10s
+
+---
+# VirtualService para rollouts (se activa cuando hay rollout)
+# Usa un host diferente para evitar conflictos
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-microservice-rollout
+  namespace: default
+  labels:
+    rollout-active: "false"  # Se cambia a true cuando hay rollout activo
+spec:
+  hosts:
+  - demo-microservice-rollout.default.svc.cluster.local
+  http:
+  # Canary routing para rollouts
+  - match:
+    - headers:
+        canary:
+          exact: "true"
+    route:
+    - destination:
+        host: demo-microservice-rollout.default.svc.cluster.local
+        subset: rollout-canary
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "rollout-canary"
+          x-istio-routing: "canary"
+  
+  # Stable routing para rollouts
+  - route:
+    - destination:
+        host: demo-microservice-rollout.default.svc.cluster.local
+        subset: rollout-stable
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "rollout-stable"
+          x-istio-routing: "stable"

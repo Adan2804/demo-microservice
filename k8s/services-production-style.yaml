@@ -1,0 +1,82 @@
+# Servicios para configuración de producción
+# Rollout maneja el tráfico estable, Experiment solo canary
+
+# Servicio principal - apunta al rollout (estable)
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: main
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+  type: LoadBalancer
+
+---
+# Servicio para experimento canary (solo header)
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-canary
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: canary
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    experiment: canary
+    traffic-type: experimental
+  type: ClusterIP
+
+---
+# Servicios para rollout BlueGreen (activo/preview)
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-rollout-active
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: rollout-active
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+  type: LoadBalancer
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-rollout-preview
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: rollout-preview
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+  type: ClusterIP

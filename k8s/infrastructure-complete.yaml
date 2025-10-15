@@ -1,0 +1,328 @@
+# Infraestructura completa permanente - Desplegar una sola vez
+# kubectl apply -f k8s/infrastructure-complete.yaml
+
+# ===========================================
+# PRODUCCIÓN (3 pods - Azure DevOps)
+# ===========================================
+
+# Deployment de producción
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-production
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: production
+    managed-by: azure-devops
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: demo-microservice
+      tier: production
+  template:
+    metadata:
+      labels:
+        app: demo-microservice
+        tier: production
+        version: stable
+        traffic-type: production
+    spec:
+      containers:
+      - name: demo-microservice
+        image: demo-microservice:stable  # Azure DevOps actualiza esta imagen
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        - name: APP_VERSION
+          value: "production-stable"
+        - name: ENVIRONMENT
+          value: "production"
+        - name: EXPERIMENT_ENABLED
+          value: "false"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+---
+# Servicio de producción
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-stable
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: production
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: demo-microservice
+    tier: production
+  type: ClusterIP
+
+---
+# ===========================================
+# EXPERIMENTO (1 pod - Task externo)
+# ===========================================
+
+# Deployment de experimento (inicialmente sin pods)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: experiment
+    managed-by: external-task
+spec:
+  replicas: 0  # Inicialmente sin pods - se activa con task externo
+  selector:
+    matchLabels:
+      app: demo-microservice
+      tier: experiment
+  template:
+    metadata:
+      labels:
+        app: demo-microservice
+        tier: experiment
+        version: experimental
+        traffic-type: experiment
+    spec:
+      containers:
+      - name: demo-microservice
+        image: demo-microservice:experiment  # Task externo actualiza esta imagen
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        - name: APP_VERSION
+          value: "experiment-candidate"
+        - name: ENVIRONMENT
+          value: "production-experiment"
+        - name: EXPERIMENT_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+
+---
+# Servicio de experimento (siempre existe)
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: experiment
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: demo-microservice
+    tier: experiment
+  type: ClusterIP
+
+---
+# ===========================================
+# PROXY INTELIGENTE (Enrutamiento)
+# ===========================================
+
+# ConfigMap del proxy
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: microservice-proxy-config
+  namespace: default
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+    
+    http {
+        # Logs detallados
+        log_format detailed '$remote_addr - $remote_user [$time_local] "$request" '
+                           '$status $body_bytes_sent "$http_referer" '
+                           '"$http_user_agent" '
+                           'experiment_header="$http_aws_cf_cd_super_svp_9f8b7a6d" '
+                           'routed_to="$upstream_addr"';
+        
+        access_log /var/log/nginx/access.log detailed;
+        
+        # Backend de producción (siempre disponible)
+        upstream stable_backend {
+            server demo-microservice-stable:80;
+        }
+        
+        # Backend de experimento con fallback automático
+        upstream experiment_backend {
+            server demo-microservice-experiment:80 max_fails=1 fail_timeout=1s;
+            server demo-microservice-stable:80 backup;  # Fallback automático
+        }
+        
+        # Health check
+        server {
+            listen 8080;
+            location /health {
+                return 200 "proxy-healthy\n";
+                add_header Content-Type text/plain;
+            }
+        }
+        
+        # Servidor principal
+        server {
+            listen 80;
+            
+            # Status del proxy
+            location /proxy/status {
+                return 200 "Microservice Proxy Status\nProduction: demo-microservice-stable:80\nExperiment: demo-microservice-experiment:80 (with fallback)\nHeader: aws-cf-cd-super-svp-9f8b7a6d\n";
+                add_header Content-Type text/plain;
+            }
+            
+            # Enrutamiento principal
+            location / {
+                # Headers estándar
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                
+                # Timeouts
+                proxy_connect_timeout 5s;
+                proxy_send_timeout 30s;
+                proxy_read_timeout 30s;
+                
+                # Si hay header de experimento, ir a experimento (con fallback automático)
+                if ($http_aws_cf_cd_super_svp_9f8b7a6d = "123e4567-e89b-12d3-a456-42661417400") {
+                    proxy_pass http://experiment_backend;
+                    add_header X-Routed-To "experiment" always;
+                    break;
+                }
+                
+                # Tráfico normal va a producción estable
+                proxy_pass http://stable_backend;
+                add_header X-Routed-To "production" always;
+            }
+        }
+    }
+
+---
+# Deployment del proxy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: microservice-proxy
+  namespace: default
+  labels:
+    app: microservice-proxy
+    tier: infrastructure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: microservice-proxy
+  template:
+    metadata:
+      labels:
+        app: microservice-proxy
+        tier: infrastructure
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        - containerPort: 8080
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: microservice-proxy-config
+
+---
+# Servicio del proxy (punto de entrada único)
+apiVersion: v1
+kind: Service
+metadata:
+  name: microservice-proxy
+  namespace: default
+  labels:
+    app: microservice-proxy
+    tier: infrastructure
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  - port: 8080
+    targetPort: 8080
+    name: health
+  selector:
+    app: microservice-proxy
+  type: LoadBalancer

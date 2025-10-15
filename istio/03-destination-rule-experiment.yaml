@@ -1,0 +1,47 @@
+# DestinationRule con subset de experimento
+# Este archivo reemplaza al DestinationRule base cuando se crea un experimento
+
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: demo-microservice-destination
+  namespace: default
+  labels:
+    experiment-active: "true"
+spec:
+  host: demo-microservice-istio.default.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        maxRequestsPerConnection: 10
+    loadBalancer:
+      simple: LEAST_CONN
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+  subsets:
+  # Subset para pods de producción estable (Istio)
+  - name: stable
+    labels:
+      app: demo-microservice-istio
+      tier: production
+      version: stable
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 50
+  
+  # Subset para pods de experimento (Istio)
+  - name: experiment
+    labels:
+      app: demo-microservice-istio
+      tier: experiment
+      version: experimental
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 20

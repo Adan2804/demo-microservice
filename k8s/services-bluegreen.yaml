@@ -1,0 +1,64 @@
+# Servicio activo (Blue-Green) - Recibe 100% del tráfico normal
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-active
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: active
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    experiment: stable
+    traffic-type: active
+  type: LoadBalancer
+
+---
+# Servicio preview (Blue-Green) - Para validación
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-preview
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: preview
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    experiment: experiment
+    traffic-type: experimental
+  type: ClusterIP
+
+---
+# Servicio principal (para acceso externo unificado)
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice
+  namespace: default
+  labels:
+    app: demo-microservice
+    service-type: main
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    experiment: stable
+    traffic-type: active
+  type: LoadBalancer

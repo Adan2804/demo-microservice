@@ -1,0 +1,77 @@
+# Deployment normal de producción (manejado por Azure DevOps)
+# Este archivo representa lo que ya tienes en producción
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-production
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: production
+    managed-by: azure-devops
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: demo-microservice
+      tier: production
+  template:
+    metadata:
+      labels:
+        app: demo-microservice
+        tier: production
+        version: stable
+    spec:
+      containers:
+      - name: demo-microservice
+        image: demo-microservice:stable  # Esta imagen la actualiza Azure DevOps
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        - name: APP_VERSION
+          value: "production-stable"
+        - name: ENVIRONMENT
+          value: "production"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "400m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+---
+# Servicio de producción (manejado por Azure DevOps)
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-production
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: production
+    managed-by: azure-devops
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    tier: production
+  type: ClusterIP

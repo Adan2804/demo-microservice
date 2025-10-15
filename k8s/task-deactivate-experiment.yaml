@@ -1,0 +1,11 @@
+# Task para desactivar experimento - Simula task externo en Azure DevOps
+# kubectl apply -f k8s/task-deactivate-experiment.yaml
+
+# Patch para desactivar el experimento (0 pods)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+spec:
+  replicas: 0  # Desactivar experimento

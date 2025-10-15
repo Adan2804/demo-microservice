@@ -1,0 +1,80 @@
+# Experimento opcional - Desplegar cuando necesites probar
+# kubectl apply -f k8s/03-experiment-optional.yaml
+# kubectl delete -f k8s/03-experiment-optional.yaml  # Para eliminar
+
+# Deployment del experimento
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: experiment
+    managed-by: manual
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-microservice
+      tier: experiment
+  template:
+    metadata:
+      labels:
+        app: demo-microservice
+        tier: experiment
+        version: experimental
+    spec:
+      containers:
+      - name: demo-microservice
+        image: demo-microservice:experiment
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        - name: APP_VERSION
+          value: "experiment-v1.1.0"
+        - name: ENVIRONMENT
+          value: "production-experiment"
+        - name: EXPERIMENT_MODE
+          value: "true"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+
+---
+# Servicio del experimento
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: experiment
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+  selector:
+    app: demo-microservice
+    tier: experiment
+  type: ClusterIP

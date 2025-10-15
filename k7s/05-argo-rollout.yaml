@@ -1,0 +1,83 @@
+
+# Argo Rollout para promociones automáticas BlueGreen
+# Se usa para promover experimentos exitosos a producción
+
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: demo-microservice-rollout
+  namespace: default
+  labels:
+    app: demo-microservice-rollout
+    managed-by: argo-rollouts
+spec:
+  replicas: 3  # Misma cantidad que producción
+  strategy:
+    blueGreen:
+      activeService: demo-microservice-rollout-active
+      previewService: demo-microservice-rollout-preview
+      autoPromotionEnabled: false  # Promoción manual para control
+      scaleDownDelaySeconds: 30
+  selector:
+    matchLabels:
+      app: demo-microservice-rollout
+  template:
+    metadata:
+      labels:
+        app: demo-microservice-rollout
+        version: stable
+    spec:
+      containers:
+      - name: demo-microservice
+        image: demo-microservice:stable  # Imagen inicial
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        - name: ENVIRONMENT
+          value: "production-rollout"
+        - name: MANAGED_BY
+          value: "argo-rollouts"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+
+---
+# AnalysisTemplate simple para validar el rollout (sin Prometheus)
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate-analysis
+  namespace: default
+spec:
+  args:
+  - name: service-name
+  metrics:
+  - name: webmetric
+    interval: 10s
+    count: 2
+    successCondition: result == "true"
+    provider:
+      web:
+        url: "http://{{args.service-name}}/health"
+        headers:
+        - key: "Content-Type"
+          value: "application/json"
+        jsonPath: "{$.status}"

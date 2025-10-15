@@ -1,0 +1,169 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: intelligent-proxy-config
+  namespace: default
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+    
+    http {
+        # Logs detallados para debugging
+        log_format detailed '$remote_addr - $remote_user [$time_local] "$request" '
+                           '$status $body_bytes_sent "$http_referer" '
+                           '"$http_user_agent" '
+                           'experiment_header="$http_aws_cf_cd_super_svp_9f8b7a6d" '
+                           'upstream_used="$upstream_addr"';
+        
+        access_log /var/log/nginx/access.log detailed;
+        error_log /var/log/nginx/error.log warn;
+        
+        # Backend de producción (siempre disponible)
+        upstream stable_backend {
+            server demo-microservice-stable:80;
+        }
+        
+        # Backend de experimento con fallback automático a producción
+        upstream experiment_backend {
+            server demo-microservice-experiment:80 max_fails=1 fail_timeout=1s;
+            server demo-microservice-stable:80 backup;
+        }
+        
+        # Health check interno
+        server {
+            listen 8080;
+            location /health {
+                access_log off;
+                return 200 "intelligent-proxy-healthy\n";
+                add_header Content-Type text/plain;
+            }
+        }
+        
+        # Servidor principal
+        server {
+            listen 80;
+            server_name _;
+            
+            # Status del proxy
+            location /proxy/status {
+                access_log off;
+                return 200 "Intelligent Proxy Status\n======================\nProduction: demo-microservice-stable:80 (Always Available)\nExperiment: demo-microservice-experiment:80 (Auto-fallback to production)\nHeader Required: aws-cf-cd-super-svp-9f8b7a6d = 123e4567-e89b-12d3-a456-42661417400\n";
+                add_header Content-Type text/plain;
+            }
+            
+            # Health check público
+            location /proxy/health {
+                access_log off;
+                return 200 "proxy-ok\n";
+                add_header Content-Type text/plain;
+            }
+            
+            # Enrutamiento principal
+            location / {
+                # Headers estándar
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                
+                # Configuración de timeouts y reintentos
+                proxy_connect_timeout 5s;
+                proxy_send_timeout 30s;
+                proxy_read_timeout 30s;
+                proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+                proxy_next_upstream_tries 2;
+                
+                # Si hay header de experimento, intentar experimento primero
+                if ($http_aws_cf_cd_super_svp_9f8b7a6d = "123e4567-e89b-12d3-a456-42661417400") {
+                    proxy_pass http://experiment_backend;
+                    add_header X-Routed-To "experiment-attempt" always;
+                    add_header X-Fallback-Available "yes" always;
+                    break;
+                }
+                
+                # Tráfico normal va a producción
+                proxy_pass http://stable_backend;
+                add_header X-Routed-To "production-stable" always;
+            }
+        }
+    }
+
+---
+# Deployment del proxy
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: intelligent-proxy
+  namespace: default
+  labels:
+    app: intelligent-proxy
+    tier: infrastructure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: intelligent-proxy
+  template:
+    metadata:
+      labels:
+        app: intelligent-proxy
+        tier: infrastructure
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 8080
+          name: health
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: intelligent-proxy-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: intelligent-proxy
+  namespace: default
+  labels:
+    app: intelligent-proxy
+    tier: infrastructure
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  - port: 8080
+    targetPort: 8080
+    name: health
+  selector:
+    app: intelligent-proxy
+  type: LoadBalancer

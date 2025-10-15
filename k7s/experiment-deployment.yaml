@@ -1,0 +1,62 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Experiment
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: experiment
+    managed-by: argo-experiments
+spec:
+  duration: 24h
+  progressDeadlineSeconds: 86400
+  
+  templates:
+  - name: experimental
+    replicas: 1
+    selector:
+      matchLabels:
+        app: demo-microservice
+        tier: experiment
+        traffic-type: experiment
+    template:
+      metadata:
+        labels:
+          app: demo-microservice
+          tier: experiment
+          traffic-type: experiment
+          version: experimental
+      spec:
+        containers:
+        - name: demo-microservice
+          image: demo-microservice:experiment
+          ports:
+          - containerPort: 3000
+          env:
+          - name: PORT
+            value: "3000"
+          - name: APP_VERSION
+            value: "experiment-candidate-v1.1.0"
+          - name: ENVIRONMENT
+            value: "production-experiment"
+          - name: EXPERIMENT_ENABLED
+            value: "true"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10

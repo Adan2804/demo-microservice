@@ -1,0 +1,112 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Experiment
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice
+spec:
+  duration: 4h  # Duración del experimento - 4 horas
+  progressDeadlineSeconds: 14400
+  
+  # Templates del experimento
+  templates:
+  # Template para versión estable (3 pods activos)
+  - name: stable
+    replicas: 3
+    selector:
+      matchLabels:
+        app: demo-microservice
+        experiment: stable
+        traffic-type: active
+    template:
+      metadata:
+        labels:
+          app: demo-microservice
+          experiment: stable
+          traffic-type: active
+          version: stable
+      spec:
+        containers:
+        - name: demo-microservice
+          image: demo-microservice:stable
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 3000
+            protocol: TCP
+          env:
+          - name: PORT
+            value: "3000"
+          - name: APP_VERSION
+            value: "stable-v1.0.0"
+          - name: EXPERIMENT_ENABLED
+            value: "false"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+  # Template para versión experimental (1 pod, sin tráfico normal)
+  - name: experiment
+    replicas: 1
+    selector:
+      matchLabels:
+        app: demo-microservice
+        experiment: experiment
+        traffic-type: experimental
+    template:
+      metadata:
+        labels:
+          app: demo-microservice
+          experiment: experiment
+          traffic-type: experimental
+          version: experiment
+      spec:
+        containers:
+        - name: demo-microservice
+          image: demo-microservice:experiment
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 3000
+            protocol: TCP
+          env:
+          - name: PORT
+            value: "3000"
+          - name: APP_VERSION
+            value: "experiment-v1.1.0"
+          - name: EXPERIMENT_ENABLED
+            value: "true"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5

@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-microservice
+  namespace: argocd
+  labels:
+    app: demo-microservice
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/tu-usuario/demo-microservice  # Cambiar por tu repo
+    targetRevision: HEAD
+    path: k8s
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+    
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    
+  # Configuración específica para Rollouts
+  ignoreDifferences:
+  - group: argoproj.io
+    kind: Rollout
+    jsonPointers:
+    - /spec/replicas
+    - /status
+
+---
+# Application para el experimento (separado para control independiente)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-microservice-experiment
+  namespace: argocd
+  labels:
+    app: demo-microservice-experiment
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/tu-usuario/demo-microservice  # Cambiar por tu repo
+    targetRevision: experiment-branch  # Branch específico para experimentos
+    path: k8s
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+    
+  syncPolicy:
+    # Sync manual para experimentos
+    automated: null
+    syncOptions:
+    - CreateNamespace=true

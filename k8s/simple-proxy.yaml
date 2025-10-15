@@ -1,0 +1,160 @@
+# Proxy simple que solo enruta a producción inicialmente
+# Se puede actualizar dinámicamente cuando hay experimentos
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: simple-proxy-config
+  namespace: default
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+    
+    http {
+        # Logs para debugging
+        log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                       '$status $body_bytes_sent "$http_referer" '
+                       '"$http_user_agent" "$http_x_forwarded_for" '
+                       'experiment_header="$http_aws_cf_cd_super_svp_9f8b7a6d"';
+        
+        access_log /var/log/nginx/access.log main;
+        error_log /var/log/nginx/error.log warn;
+        
+        # Backend de producción (siempre disponible)
+        upstream production_backend {
+            server demo-microservice-production:80;
+        }
+        
+        # Health check endpoint
+        server {
+            listen 8080;
+            location /health {
+                access_log off;
+                return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+        }
+        
+        # Main server
+        server {
+            listen 80;
+            server_name _;
+            
+            # Health check para el proxy
+            location /proxy/health {
+                access_log off;
+                return 200 "proxy-healthy\n";
+                add_header Content-Type text/plain;
+            }
+            
+            # Endpoint para verificar configuración
+            location /proxy/config {
+                access_log off;
+                return 200 "Production: demo-microservice-production:80\nExperiment: Not configured yet\nHeader: aws-cf-cd-super-svp-9f8b7a6d\n";
+                add_header Content-Type text/plain;
+            }
+            
+            # Enrutamiento principal - solo producción por ahora
+            location / {
+                # Headers estándar
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                
+                # Timeout settings
+                proxy_connect_timeout 10s;
+                proxy_send_timeout 30s;
+                proxy_read_timeout 30s;
+                
+                # Por ahora todo va a producción
+                proxy_pass http://production_backend;
+                add_header X-Routed-To "production" always;
+                
+                # Si hay header de experimento, añadir header informativo
+                if ($http_aws_cf_cd_super_svp_9f8b7a6d = "123e4567-e89b-12d3-a456-42661417400") {
+                    add_header X-Experiment-Header-Detected "true" always;
+                }
+            }
+        }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-proxy
+  namespace: default
+  labels:
+    app: simple-proxy
+    tier: infrastructure
+spec:
+  replicas: 1  # Solo 1 replica para simplicidad
+  selector:
+    matchLabels:
+      app: simple-proxy
+  template:
+    metadata:
+      labels:
+        app: simple-proxy
+        tier: infrastructure
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 8080
+          name: health
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 2
+          periodSeconds: 5
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: simple-proxy-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simple-proxy
+  namespace: default
+  labels:
+    app: simple-proxy
+    tier: infrastructure
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: health
+  selector:
+    app: simple-proxy
+  type: LoadBalancer

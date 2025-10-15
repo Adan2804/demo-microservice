@@ -1,0 +1,90 @@
+# Experimento paralelo independiente del pipeline de Azure DevOps
+# Se puede crear/eliminar sin afectar producción
+apiVersion: argoproj.io/v1alpha1
+kind: Experiment
+metadata:
+  name: demo-microservice-parallel-experiment
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: experiment
+    managed-by: manual
+spec:
+  duration: 168h  # 1 semana - duración larga para testing continuo
+  progressDeadlineSeconds: 604800
+  
+  templates:
+  # Solo template experimental - producción está en Deployment separado
+  - name: experimental
+    replicas: 1
+    selector:
+      matchLabels:
+        app: demo-microservice
+        tier: experiment
+        traffic-type: header-only
+    template:
+      metadata:
+        labels:
+          app: demo-microservice
+          tier: experiment
+          traffic-type: header-only
+          version: experimental
+      spec:
+        containers:
+        - name: demo-microservice
+          image: demo-microservice:experiment  # Imagen experimental
+          imagePullPolicy: Always  # Siempre pull para testing
+          ports:
+          - containerPort: 3000
+            protocol: TCP
+          env:
+          - name: PORT
+            value: "3000"
+          - name: APP_VERSION
+            value: "experimental-$(date +%Y%m%d)"
+          - name: ENVIRONMENT
+            value: "production-experiment"
+          - name: EXPERIMENT_MODE
+            value: "true"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+---
+# Servicio para el experimento
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: experiment
+    managed-by: manual
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    tier: experiment
+    traffic-type: header-only
+  type: ClusterIP

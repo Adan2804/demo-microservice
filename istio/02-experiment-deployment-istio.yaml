@@ -1,0 +1,64 @@
+# Deployment de experimento para Istio (Deployment normal de Kubernetes)
+# Usa las mismas labels que espera el DestinationRule
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    tier: experiment
+    version: experimental
+    managed-by: istio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-microservice-istio
+      tier: experiment
+  template:
+    metadata:
+      labels:
+        app: demo-microservice-istio
+        tier: experiment
+        traffic-type: experiment
+        version: experimental
+        sidecar.istio.io/inject: "true"  # Inyección automática de Istio sidecar
+    spec:
+      containers:
+      - name: demo-microservice
+        image: demo-microservice:experiment-candidate-v1.1.0
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: PORT
+          value: "3000"
+        - name: APP_VERSION
+          value: "experiment-candidate-istio-v1.1.0"
+        - name: ENVIRONMENT
+          value: "production-experiment-istio"
+        - name: EXPERIMENT_ENABLED
+          value: "true"
+        - name: ISTIO_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 15
+          periodSeconds: 10

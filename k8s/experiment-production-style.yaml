@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Experiment
+metadata:
+  name: demo-microservice-canary-test
+  namespace: default
+  labels:
+    app: demo-microservice
+    type: canary-experiment
+spec:
+  duration: 24h  # Duración más larga para pruebas
+  progressDeadlineSeconds: 86400
+  
+  # Solo el template experimental - el stable está en el rollout
+  templates:
+  # Template SOLO para versión experimental (1 pod temporal)
+  - name: canary
+    replicas: 1
+    selector:
+      matchLabels:
+        app: demo-microservice
+        experiment: canary
+        traffic-type: experimental
+    template:
+      metadata:
+        labels:
+          app: demo-microservice
+          experiment: canary
+          traffic-type: experimental
+          version: canary
+      spec:
+        containers:
+        - name: demo-microservice
+          image: demo-microservice:experiment
+          imagePullPolicy: IfNotPresent
+          ports:
+          - containerPort: 3000
+            protocol: TCP
+          env:
+          - name: PORT
+            value: "3000"
+          - name: APP_VERSION
+            value: "canary-v1.1.0"
+          - name: EXPERIMENT_ENABLED
+            value: "true"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5

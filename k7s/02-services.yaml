@@ -1,0 +1,45 @@
+# Servicios permanentes - Siempre existen
+# Stable service y Experiment service (aunque experimento esté inactivo)
+
+# Servicio para producción estable
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-stable
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: production
+    service-type: stable
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    tier: production
+  type: ClusterIP
+
+---
+# Servicio para experimento (siempre existe, aunque no haya pods)
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice
+    tier: experiment
+    service-type: experiment
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    tier: experiment
+  type: ClusterIP
