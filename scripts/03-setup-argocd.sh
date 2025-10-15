@@ -182,8 +182,8 @@ kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge -p='{"data":
 kubectl rollout restart deployment/argocd-repo-server -n argocd
 sleep 10
 
-# Eliminar aplicaciones problemáticas existentes
-kubectl delete applications -n argocd --all --ignore-not-found=true
+# Eliminar solo la aplicación del experimento (no debe estar en ArgoCD)
+kubectl delete application demo-microservice-experiment -n argocd --ignore-not-found=true
 
 # Crear Application simple que funcione
 cat > argocd-manifests/demo-microservice-app.yaml << EOF
@@ -334,8 +334,8 @@ echo "• Usuario: admin"
 echo "• Password: $ARGOCD_PASSWORD"
 echo ""
 echo "📱 APLICACIONES CONFIGURADAS:"
-echo "• demo-microservice-production (Auto-sync habilitado)"
-echo "• demo-microservice-experiment (Sync manual)"
+echo "• demo-microservice-istio (Solo producción estable)"
+echo "• Experimentos se gestionan FUERA de ArgoCD (como en la empresa)"
 echo ""
 echo "🛠️  GESTIÓN:"
 echo "• Iniciar ArgoCD: ./scripts/start-argocd.sh"
@@ -349,11 +349,16 @@ echo ""
 echo "🚀 PRÓXIMOS PASOS:"
 echo "1. Abrir https://localhost:8081 en tu navegador"
 echo "2. Iniciar sesión con las credenciales mostradas"
-echo "3. Gestionar deployments desde la interfaz web"
-echo "4. Crear experimentos desde ArgoCD"
+echo "3. Crear experimentos: ./scripts/01-create-experiment.sh"
+echo "4. Promover a rollout: ./scripts/02-promote-to-rollout.sh"
+echo ""
+echo "🏢 SIMULACIÓN EMPRESARIAL:"
+echo "• ArgoCD gestiona SOLO producción estable"
+echo "• Experimentos se crean/eliminan dinámicamente SIN ArgoCD"
+echo "• Esto simula el comportamiento real de Bancolombia"
 echo ""
 echo "💡 NOTA:"
-echo "ArgoCD ahora gestiona tus deployments automáticamente."
-echo "Los cambios en los archivos YAML se sincronizarán automáticamente."
+echo "ArgoCD gestiona solo aplicaciones estables."
+echo "Los experimentos se manejan externamente (como en la empresa)."
 echo ""
 echo "Port-forward activo (PID: $ARGOCD_PF_PID)"
