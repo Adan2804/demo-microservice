@@ -197,7 +197,7 @@ metadata:
 spec:
   project: demo-project
   source:
-    repoURL: 'file://$(pwd)'
+    repoURL: 'https://github.com/Adan2804/demo-microservice.git'
     path: istio
     targetRevision: HEAD
   destination:
