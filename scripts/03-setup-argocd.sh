@@ -130,6 +130,15 @@ echo "📝 CREANDO CONFIGURACIONES PARA ARGOCD..."
 # Crear directorio para manifiestos de ArgoCD
 mkdir -p argocd-manifests
 
+# Crear carpeta separada solo para producción (lo que ArgoCD debe gestionar)
+mkdir -p argocd-production
+cp istio/01-production-deployment-istio.yaml argocd-production/
+cp istio/02-service-unified.yaml argocd-production/
+cp istio/03-destination-rule.yaml argocd-production/
+cp istio/04-virtual-service.yaml argocd-production/
+
+echo "✅ Carpeta argocd-production creada con solo archivos de producción"
+
 # Configurar repositorio Git local primero
 if [ ! -d ".git" ]; then
     echo "Inicializando repositorio Git..."
@@ -198,7 +207,7 @@ spec:
   project: demo-project
   source:
     repoURL: 'https://github.com/Adan2804/demo-microservice.git'
-    path: istio
+    path: argocd-production
     targetRevision: HEAD
   destination:
     server: 'https://kubernetes.default.svc'
