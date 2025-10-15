@@ -191,10 +191,16 @@ kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge -p='{"data":
 kubectl rollout restart deployment/argocd-repo-server -n argocd
 sleep 10
 
-# Eliminar solo la aplicación del experimento (no debe estar en ArgoCD)
-kubectl delete application demo-microservice-experiment -n argocd --ignore-not-found=true
+# Limpiar recursos huérfanos que causan problemas de sincronización
+echo "Limpiando recursos huérfanos..."
+kubectl delete rollout demo-microservice-rollout-istio --ignore-not-found=true
+kubectl delete analysistemplate success-rate-analysis-istio --ignore-not-found=true
 
-# Crear Application simple que funcione
+# Eliminar aplicaciones problemáticas
+kubectl delete application demo-microservice-experiment -n argocd --ignore-not-found=true
+kubectl delete application demo-microservice-istio -n argocd --ignore-not-found=true
+
+# Crear Application limpia con auto-sync y prune habilitado
 cat > argocd-manifests/demo-microservice-app.yaml << EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -215,8 +221,12 @@ spec:
     server: 'https://kubernetes.default.svc'
     namespace: default
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
     - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
 EOF
 
 # Crear proyecto personalizado para permitir repositorios locales
@@ -255,25 +265,17 @@ sleep 15
 # Aplicar configuraciones
 kubectl apply -f argocd-manifests/
 
-# Verificar el estado de la aplicación con logs detallados
-echo "Verificando estado de la aplicación en ArgoCD..."
+# Esperar que la aplicación se cree
+echo "Esperando que la aplicación se cree..."
 sleep 10
 
-# Obtener logs detallados de ArgoCD
-echo "=== LOGS DE ARGOCD REPO-SERVER ==="
-kubectl logs -n argocd deployment/argocd-repo-server --tail=20
+# Forzar sincronización limpia con prune
+echo "Forzando sincronización limpia..."
+kubectl patch application demo-microservice-istio -n argocd --type='merge' -p='{"operation":{"sync":{"revision":"HEAD","prune":true}}}'
 
-echo ""
-echo "=== ESTADO DE LA APLICACIÓN ==="
-kubectl get application demo-microservice-istio -n argocd -o yaml
-
-echo ""
-echo "=== VERIFICANDO ARCHIVOS EN EL REPOSITORIO ==="
-ls -la istio/
-
-# Forzar sincronización inmediata
-echo "Forzando sincronización de la aplicación..."
-kubectl patch application demo-microservice-istio -n argocd --type='merge' -p='{"operation":{"sync":{"revision":"HEAD"}}}'
+# Esperar sincronización
+echo "Esperando sincronización..."
+sleep 15
 
 echo "✅ Aplicaciones configuradas en ArgoCD"
 
@@ -329,6 +331,15 @@ kubectl get pods -n argocd
 echo ""
 echo "Aplicaciones en ArgoCD:"
 kubectl get applications -n argocd
+
+echo ""
+echo "Estado detallado de la aplicación:"
+kubectl get application demo-microservice-istio -n argocd -o jsonpath='{.status.sync.status}' && echo " (Sync Status)"
+kubectl get application demo-microservice-istio -n argocd -o jsonpath='{.status.health.status}' && echo " (Health Status)"
+
+echo ""
+echo "Recursos gestionados por ArgoCD:"
+kubectl get pods,svc,deployment -l app=demo-microservice-istio
 
 # 9. RESUMEN FINAL
 echo ""
