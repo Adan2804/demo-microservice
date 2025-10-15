@@ -207,8 +207,10 @@ spec:
   project: demo-project
   source:
     repoURL: 'https://github.com/Adan2804/demo-microservice.git'
-    path: argocd-production
+    path: istio
     targetRevision: HEAD
+    directory:
+      include: '01-production-deployment-istio.yaml,02-service-unified.yaml,03-destination-rule.yaml,04-virtual-service.yaml'
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default
