@@ -6,13 +6,16 @@ metadata:
   namespace: default
   labels:
     experiment-active: "false"
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
 spec:
   hosts:
   - "*"
   gateways:
   - demo-microservice-gateway
   http:
-  
+
   # Todo el tráfico externo va a producción
   - match:
     - uri:
