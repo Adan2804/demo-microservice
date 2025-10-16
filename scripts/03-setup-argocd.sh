@@ -197,11 +197,9 @@ spec:
     server: 'https://kubernetes.default.svc'
     namespace: default
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
     syncOptions:
     - CreateNamespace=true
+    # NO auto-sync - Solo sincronización manual
 EOF
 
 echo "✅ Configuraciones creadas"

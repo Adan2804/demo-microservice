@@ -119,6 +119,8 @@ kubectl apply -f istio/03-destination-rule-experiment.yaml
 echo "Actualizando VirtualServices con enrutamiento de experimento..."
 kubectl apply -f istio/04-virtual-service-experiment.yaml
 
+echo "✅ ArgoCD ignorará estos cambios gracias a las anotaciones configuradas"
+
 # Esperar que la configuración se propague
 echo "Esperando que la configuración de Istio se propague..."
 sleep 10
@@ -223,4 +225,9 @@ echo "Una vez validado el experimento, promover a rollout:"
 echo "./scripts/02-promote-to-rollout.sh"
 echo ""
 echo "🛑 PARA ELIMINAR EL EXPERIMENTO:"
+echo "./scripts/cleanup-experiment.sh"
+echo ""
+echo "O manualmente:"
 echo "kubectl delete deployment demo-microservice-experiment"
+echo "kubectl apply -f argocd-production/03-destination-rule.yaml"
+echo "kubectl apply -f argocd-production/04-virtual-service.yaml"
