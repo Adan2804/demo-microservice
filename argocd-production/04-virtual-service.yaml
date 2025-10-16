@@ -12,6 +12,7 @@ spec:
   gateways:
   - demo-microservice-gateway
   http:
+  
   # Todo el tráfico externo va a producción
   - match:
     - uri:
