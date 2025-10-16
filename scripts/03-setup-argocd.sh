@@ -194,7 +194,7 @@ sleep 10
 # Eliminar solo la aplicación del experimento (no debe estar en ArgoCD)
 kubectl delete application demo-microservice-experiment -n argocd --ignore-not-found=true
 
-# Crear Application simple que funcione (SIN argocd-manifests)
+# Crear Application SOLO para producción (SIN experimentos)
 cat > /tmp/demo-microservice-app.yaml << EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -209,6 +209,8 @@ spec:
     repoURL: 'https://github.com/Adan2804/demo-microservice.git'
     path: istio
     targetRevision: HEAD
+    directory:
+      include: '01-production-deployment-istio.yaml,02-service-unified.yaml,03-destination-rule.yaml,04-virtual-service.yaml'
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default
