@@ -10,8 +10,15 @@ metadata:
     app: demo-microservice-istio
     tier: production
     version: stable
+  annotations:
+    # Hacer este deployment inmutable - ArgoCD no lo modificará
+    argocd.argoproj.io/sync-options: Prune=false
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+    # Protección adicional contra cambios
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/managed-by: "argocd-immutable"
     managed-by: istio
-    
+
 spec:
   replicas: 3
   selector:
@@ -26,6 +33,14 @@ spec:
         traffic-type: production
         version: stable
         sidecar.istio.io/inject: "true"  # Inyección automática de Istio sidecar
+      annotations:
+        # Anotaciones para hacer el pod inmutable
+        fluentbit.io/exclude: 'true'
+        sidecar.opentelemetry.io/inject: 'false'
+        argocd.argoproj.io/sync-options: Prune=false
+        argocd.argoproj.io/compare-options: IgnoreExtraneous
+        # Marcar como recurso crítico de producción
+        kubernetes.io/change-cause: "Production stable deployment - IMMUTABLE"
     spec:
       containers:
       - name: demo-microservice
