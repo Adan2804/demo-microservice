@@ -71,7 +71,7 @@ fi
 
 # Limpiar experimentos anteriores automáticamente
 echo "🧹 Limpiando experimentos anteriores..."
-kubectl delete deployment demo-microservice-experiment --ignore-not-found=true
+
 
 echo "✅ Prerequisitos verificados"
 

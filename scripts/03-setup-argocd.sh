@@ -157,31 +157,7 @@ echo "=== ARCHIVOS EN DIRECTORIO ISTIO ==="
 ls -la istio/
 
 echo ""
-echo "Desplegando aplicación base directamente (sin ArgoCD)..."
-
-# Verificar cada archivo antes de aplicarlo
-for file in istio/01-production-deployment-istio.yaml istio/02-service-unified.yaml istio/03-destination-rule.yaml istio/04-virtual-service.yaml; do
-    if [ -f "$file" ]; then
-        echo "✅ Aplicando $file"
-        kubectl apply -f "$file"
-    else
-        echo "❌ Archivo no encontrado: $file"
-    fi
-done
-
-# Esperar que esté listo
-echo "Esperando que la aplicación esté lista..."
-kubectl wait --for=condition=available deployment/demo-microservice-production-istio --timeout=300s || echo "⚠️  Timeout esperando deployment"
-
-echo "✅ Aplicación base desplegada"
-
-echo ""
-echo "=== VERIFICANDO PODS DESPLEGADOS ==="
-kubectl get pods -l app=demo-microservice-istio
-
-echo ""
-echo "=== VERIFICANDO DEPLOYMENTS ==="
-kubectl get deployments -l app=demo-microservice-istio
+echo "ArgoCD se encargará del despliegue automáticamente"
 
 # Configurar ArgoCD para permitir repositorios locales
 echo "Configurando ArgoCD para repositorios locales..."
@@ -191,10 +167,18 @@ kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge -p='{"data":
 kubectl rollout restart deployment/argocd-repo-server -n argocd
 sleep 10
 
-# Eliminar solo la aplicación del experimento (no debe estar en ArgoCD)
+# Limpiar aplicaciones anteriores
 kubectl delete application demo-microservice-experiment -n argocd --ignore-not-found=true
+kubectl delete application demo-microservice-istio -n argocd --ignore-not-found=true
 
-# Crear Application SOLO para producción (SIN experimentos)
+# Crear directorio temporal para archivos de producción SOLAMENTE
+mkdir -p /tmp/argocd-production
+cp istio/01-production-deployment-istio.yaml /tmp/argocd-production/
+cp istio/02-service-unified.yaml /tmp/argocd-production/
+cp istio/03-destination-rule.yaml /tmp/argocd-production/
+cp istio/04-virtual-service.yaml /tmp/argocd-production/
+
+# Crear Application que SOLO incluya archivos de producción
 cat > /tmp/demo-microservice-app.yaml << EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -207,14 +191,15 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/Adan2804/demo-microservice.git'
-    path: istio
+    path: argocd-production
     targetRevision: HEAD
-    directory:
-      include: '01-production-deployment-istio.yaml,02-service-unified.yaml,03-destination-rule.yaml,04-virtual-service.yaml'
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
     syncOptions:
     - CreateNamespace=true
 EOF
