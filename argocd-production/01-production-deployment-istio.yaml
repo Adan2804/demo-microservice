@@ -11,6 +11,7 @@ metadata:
     tier: production
     version: stable
     managed-by: istio
+    
 spec:
   replicas: 3
   selector:
