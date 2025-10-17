@@ -6,6 +6,7 @@ kind: DestinationRule
 metadata:
   name: demo-microservice-destination
   namespace: default
+  
 spec:
   host: demo-microservice-istio.default.svc.cluster.local
   trafficPolicy:
