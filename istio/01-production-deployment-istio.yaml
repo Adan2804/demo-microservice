@@ -1,6 +1,3 @@
-# Deployment de producción para Istio (independiente)
-# Copia de la configuración base pero con labels específicos para Istio
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
