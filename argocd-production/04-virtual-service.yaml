@@ -6,16 +6,12 @@ metadata:
   namespace: default
   labels:
     experiment-active: "false"
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-    argocd.argoproj.io/compare-options: IgnoreExtraneous
 spec:
   hosts:
   - "*"
   gateways:
   - demo-microservice-gateway
   http:
-
   # Todo el tráfico externo va a producción
   - match:
     - uri:
@@ -45,9 +41,6 @@ metadata:
   namespace: default
   labels:
     experiment-active: "false"
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-    argocd.argoproj.io/compare-options: IgnoreExtraneous
 spec:
   hosts:
   - demo-microservice-istio.default.svc.cluster.local
@@ -84,9 +77,6 @@ metadata:
   namespace: default
   labels:
     rollout-active: "false"  # Se cambia a true cuando hay rollout activo
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-    argocd.argoproj.io/compare-options: IgnoreExtraneous
 spec:
   hosts:
   - demo-microservice-rollout.default.svc.cluster.local

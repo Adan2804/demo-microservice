@@ -6,9 +6,6 @@ kind: DestinationRule
 metadata:
   name: demo-microservice-destination
   namespace: default
-  annotations:
-    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-    argocd.argoproj.io/compare-options: IgnoreExtraneous
 spec:
   host: demo-microservice-istio.default.svc.cluster.local
   trafficPolicy:
