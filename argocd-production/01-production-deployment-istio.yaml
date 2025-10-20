@@ -29,14 +29,6 @@ spec:
         traffic-type: production
         version: stable
         sidecar.istio.io/inject: "true"  # Inyección automática de Istio sidecar
-      annotations:
-        # Anotaciones para hacer el pod inmutable
-        fluentbit.io/exclude: 'true'
-        sidecar.opentelemetry.io/inject: 'false'
-        argocd.argoproj.io/sync-options: Prune=false
-        argocd.argoproj.io/compare-options: IgnoreExtraneous
-        # Marcar como recurso crítico de producción
-        kubernetes.io/change-cause: "Production stable deployment - IMMUTABLE"
     spec:
       containers:
       - name: demo-microservice
@@ -62,6 +54,11 @@ spec:
           value: "2025-10-20T16:00:00Z"
         - name: NEW_ENDPOINT_ENABLED
           value: "true"
+        # PRUEBA DE SINCRONIZACIÓN
+        - name: TEST_SYNC_FEATURE
+          value: "active"
+        - name: LAST_UPDATE
+          value: "2025-10-20T17:30:00Z"
         resources:
           requests:
             memory: "128Mi"
