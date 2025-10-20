@@ -10,7 +10,11 @@ metadata:
     app: demo-microservice-istio
     tier: production
     version: stable
-    managed-by: istio
+  annotations:
+    # Deployment gestionado por ArgoCD - Sin auto-sync para control manual
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/managed-by: "argocd"
+
 spec:
   replicas: 3
   selector:
@@ -25,6 +29,14 @@ spec:
         traffic-type: production
         version: stable
         sidecar.istio.io/inject: "true"  # Inyección automática de Istio sidecar
+      annotations:
+        # Anotaciones para hacer el pod inmutable
+        fluentbit.io/exclude: 'true'
+        sidecar.opentelemetry.io/inject: 'false'
+        argocd.argoproj.io/sync-options: Prune=false
+        argocd.argoproj.io/compare-options: IgnoreExtraneous
+        # Marcar como recurso crítico de producción
+        kubernetes.io/change-cause: "Production stable deployment - IMMUTABLE"
     spec:
       containers:
       - name: demo-microservice
@@ -42,6 +54,13 @@ spec:
         - name: EXPERIMENT_ENABLED
           value: "false"
         - name: ISTIO_ENABLED
+          value: "true"
+        # NUEVAS VARIABLES PARA PROBAR ARGOCD SYNC
+        - name: ARGOCD_TEST_FEATURE
+          value: "enabled"
+        - name: DEPLOYMENT_TIME
+          value: "2025-10-20T16:00:00Z"
+        - name: NEW_ENDPOINT_ENABLED
           value: "true"
         resources:
           requests:

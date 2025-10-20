@@ -111,15 +111,21 @@ kubectl get deployments -l app=demo-microservice
 echo ""
 echo "🌐 ACTUALIZANDO CONFIGURACIÓN DE ISTIO..."
 
+echo "IMPORTANTE: Los experimentos SOBRESCRIBEN temporalmente los recursos de ArgoCD"
+echo "• ArgoCD gestiona: argocd-production/ (archivos base)"
+echo "• Experimento usa: istio/ (archivos con configuración de experimento)"
+echo "• Las anotaciones evitan que ArgoCD revierta los cambios"
+echo ""
+
 # Actualizar DestinationRule para incluir subset del experimento
-echo "Actualizando DestinationRule con subset de experimento..."
+echo "Sobrescribiendo DestinationRule con configuración de experimento..."
 kubectl apply -f istio/03-destination-rule-experiment.yaml
 
 # Actualizar VirtualServices usando apply (seguro y simple)
-echo "Actualizando VirtualServices con enrutamiento de experimento..."
+echo "Sobrescribiendo VirtualServices con enrutamiento de experimento..."
 kubectl apply -f istio/04-virtual-service-experiment.yaml
 
-echo "✅ ArgoCD ignorará estos cambios gracias a las anotaciones configuradas"
+echo "✅ Configuración de experimento aplicada (ArgoCD la ignora por las anotaciones)"
 
 # Esperar que la configuración se propague
 echo "Esperando que la configuración de Istio se propague..."

@@ -123,41 +123,26 @@ ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o js
 
 echo "✅ Credenciales obtenidas"
 
-# 5. CREAR CONFIGURACIONES PARA ARGOCD
+# 5. CONFIGURAR ARGOCD PARA USAR ARCHIVOS DE PRODUCCIÓN
 echo ""
-echo "📝 CREANDO CONFIGURACIONES PARA ARGOCD..."
+echo "📝 CONFIGURANDO ARGOCD..."
 
-# Crear directorio para manifiestos de ArgoCD
-mkdir -p argocd-manifests
-
-# Crear carpeta separada solo para producción (lo que ArgoCD debe gestionar)
-mkdir -p argocd-production
-cp istio/01-production-deployment-istio.yaml argocd-production/
-cp istio/02-service-unified.yaml argocd-production/
-cp istio/03-destination-rule.yaml argocd-production/
-cp istio/04-virtual-service.yaml argocd-production/
-
-echo "✅ Carpeta argocd-production creada con solo archivos de producción"
-
-# Configurar repositorio Git local primero
-if [ ! -d ".git" ]; then
-    echo "Inicializando repositorio Git..."
-    git init
-    git add .
-    git commit -m "Initial commit - Demo Microservice with Istio"
-else
-    echo "Actualizando repositorio Git..."
-    git add .
-    git commit -m "Update ArgoCD configuration" || echo "No hay cambios para commitear"
-fi
-
-# Asegurar que la aplicación base esté desplegada
-echo "Verificando archivos de Istio..."
-echo "=== ARCHIVOS EN DIRECTORIO ISTIO ==="
-ls -la istio/
-
+echo "📋 ARQUITECTURA DE GESTIÓN:"
+echo "=========================="
 echo ""
-echo "ArgoCD se encargará del despliegue automáticamente"
+echo "🏢 ArgoCD gestiona (SOLO producción estable):"
+echo "• argocd-production/01-production-deployment-istio.yaml"
+echo "• argocd-production/02-service-unified.yaml" 
+echo "• argocd-production/03-destination-rule.yaml"
+echo "• argocd-production/04-virtual-service.yaml"
+echo ""
+echo "🧪 Experimentos (FUERA de ArgoCD):"
+echo "• Se crean dinámicamente con kubectl apply"
+echo "• Usan archivos de istio/ (diferentes a argocd-production/)"
+echo "• SOBRESCRIBEN temporalmente los recursos de ArgoCD"
+echo "• ArgoCD los IGNORA por las anotaciones configuradas"
+echo ""
+echo "🔄 Flujo: ArgoCD despliega base → Experimento sobrescribe → Cleanup restaura base"
 
 # Configurar ArgoCD para permitir repositorios locales
 echo "Configurando ArgoCD para repositorios locales..."
@@ -171,14 +156,7 @@ sleep 10
 kubectl delete application demo-microservice-experiment -n argocd --ignore-not-found=true
 kubectl delete application demo-microservice-istio -n argocd --ignore-not-found=true
 
-# Crear directorio temporal para archivos de producción SOLAMENTE
-mkdir -p /tmp/argocd-production
-cp istio/01-production-deployment-istio.yaml /tmp/argocd-production/
-cp istio/02-service-unified.yaml /tmp/argocd-production/
-cp istio/03-destination-rule.yaml /tmp/argocd-production/
-cp istio/04-virtual-service.yaml /tmp/argocd-production/
-
-# Crear Application que SOLO incluya archivos de producción
+# Crear Application que apunta a argocd-production/
 cat > /tmp/demo-microservice-app.yaml << EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
