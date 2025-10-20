@@ -156,15 +156,13 @@ sleep 10
 kubectl delete application demo-microservice-experiment -n argocd --ignore-not-found=true
 kubectl delete application demo-microservice-istio -n argocd --ignore-not-found=true
 
-# Crear Application que apunta a argocd-production/
+# Crear Application que apunta a argocd-production/ con configuración limpia
 cat > /tmp/demo-microservice-app.yaml << EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: demo-microservice-istio
   namespace: argocd
-  labels:
-    app: demo-microservice
 spec:
   project: default
   source:
@@ -177,7 +175,15 @@ spec:
   syncPolicy:
     syncOptions:
     - CreateNamespace=true
-    # NO auto-sync - Solo sincronización manual
+    - RespectIgnoreDifferences=true
+    - ApplyOutOfSyncOnly=true
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /metadata/annotations/deployment.kubernetes.io~1revision
+    - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+    - /spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt
 EOF
 
 echo "✅ Configuraciones creadas"
