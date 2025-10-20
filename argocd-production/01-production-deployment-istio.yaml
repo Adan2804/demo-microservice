@@ -47,18 +47,9 @@ spec:
           value: "false"
         - name: ISTIO_ENABLED
           value: "true"
-        # NUEVAS VARIABLES PARA PROBAR ARGOCD SYNC
-        - name: ARGOCD_TEST_FEATURE
-          value: "enabled"
-        - name: DEPLOYMENT_TIME
-          value: "2025-10-20T16:00:00Z"
-        - name: NEW_ENDPOINT_ENABLED
-          value: "true"
-        # PRUEBA DE SINCRONIZACIÓN
-        - name: TEST_SYNC_FEATURE
-          value: "active"
-        - name: LAST_UPDATE
-          value: "2025-10-20T17:30:00Z"
+        # Variables básicas de producción
+        - name: DEPLOYMENT_VERSION
+          value: "v1.0.0"
         resources:
           requests:
             memory: "128Mi"
