@@ -1,41 +1,28 @@
-FROM nginx:alpine
+FROM eclipse-temurin:17-jre
 
 # Metadata
-LABEL version="demo"
-LABEL description="Demo container for ArgoCD testing"
+LABEL maintainer="demo-team"
+LABEL version="1.0.0"
+LABEL description="Demo Microservice for ArgoCD Testing"
 
-# Environment variables
-ENV APP_VERSION=v-1-0-0
-ENV SERVICE_VERSION=demo
+# Create app directory
+WORKDIR /app
 
-# Create a simple index page that shows version
-RUN echo '<!DOCTYPE html>
-<html>
-<head>
-    <title>Demo Microservice</title>
-</head>
-<body>
-    <h1>Demo Microservice</h1>
-    <p>Version: $APP_VERSION</p>
-    <p>Service: demo-microservice</p>
-    <p>Status: Running</p>
-    <script>
-        // Simple API simulation
-        if (window.location.pathname.includes("/demo/monetary")) {
-            document.body.innerHTML = `
-                <h1>Monetary API</h1>
-                <pre>{"version": "$APP_VERSION", "service": "demo-microservice", "status": "active"}</pre>
-            `;
-        }
-    </script>
-</body>
-</html>' > /usr/share/nginx/html/index.html
-
-# Health check endpoint
-RUN echo '{"status": "UP", "version": "$APP_VERSION"}' > /usr/share/nginx/html/health
+# Copy the jar file (or create a dummy one for demo)
+COPY target/demo-microservice-*.jar app.jar 2>/dev/null || echo 'echo "Demo app running on version $APP_VERSION"' > app
 
 # Expose port
-EXPOSE 80
+EXPOSE 8080
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Environment variables with defaults
+ENV APP_VERSION=v-1-0-0
+ENV TARGET_URI=""
+ENV SPRING_PROFILES_ACTIVE=default
+ENV SERVER_PORT=8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the application
+ENTRYPOINT ["java", "-jar", "app.jar"]

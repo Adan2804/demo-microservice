@@ -11,7 +11,7 @@ metadata:
   namespace: default
   labels:
     app: demo-microservice-istio
-    tier: experiment
+    tier: production
     version: experimental
     managed-by: istio
   annotations:
@@ -24,19 +24,19 @@ spec:
   selector:
     matchLabels:
       app: demo-microservice-istio
-      tier: experiment
+      tier: production
   template:
     metadata:
       labels:
         app: demo-microservice-istio
-        tier: experiment
+        tier: production
         traffic-type: experiment
         version: experimental
         sidecar.istio.io/inject: "true"  # Inyección automática de Istio sidecar
     spec:
       containers:
       - name: demo-microservice
-        image: demo-microservice:v1.0.0
+        image: demo-microservice:experiment
         imagePullPolicy: Never  # Usar imagen local
         ports:
         - containerPort: 3000

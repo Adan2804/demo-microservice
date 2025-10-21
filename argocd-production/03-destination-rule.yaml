@@ -27,7 +27,7 @@ spec:
   - name: experimental
     labels:
       app: demo-microservice-istio
-      tier: experiment
+      tier: production
       version: experimental
     trafficPolicy:
       connectionPool:
