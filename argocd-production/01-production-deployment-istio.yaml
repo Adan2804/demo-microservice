@@ -1,6 +1,9 @@
 # Deployment de producción para Istio (independiente)
 # Copia de la configuración base pero con labels específicos para Istio
 
+# Deployment de producción para Istio (independiente)
+# Copia de la configuración base pero con labels específicos para Istio
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -8,26 +11,27 @@ metadata:
   namespace: default
   labels:
     app: demo-microservice-istio
-    tier: production
-    version: stable
+    tier: experiment
+    version: experimental
+    managed-by: istio
   annotations:
-    # Deployment gestionado por ArgoCD - Sync manual para control
+    # Deployment gestionado por ArgoCD - Sin auto-sync para control manual
     argocd.argoproj.io/sync-options: IgnoreExtraneous=true
     argocd.argoproj.io/compare-options: IgnoreExtraneous
 
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: demo-microservice-istio
-      tier: production
+      tier: experiment
   template:
     metadata:
       labels:
         app: demo-microservice-istio
-        tier: production
-        traffic-type: production
-        version: stable
+        tier: experiment
+        traffic-type: experiment
+        version: experimental
         sidecar.istio.io/inject: "true"  # Inyección automática de Istio sidecar
     spec:
       containers:
@@ -41,34 +45,34 @@ spec:
         - name: PORT
           value: "3000"
         - name: APP_VERSION
-          value: "production-stable-v1.0.0"
+          value: "experiment-candidate-istio-v1.1.0"
         - name: ENVIRONMENT
-          value: "production-istio"
+          value: "production-experiment-istio"
         - name: EXPERIMENT_ENABLED
-          value: "false"
+          value: "true"
         - name: ISTIO_ENABLED
           value: "true"
-        # Variables básicas de producción
+        # Variables básicas de experimento
         - name: DEPLOYMENT_VERSION
-          value: "v1.0.0"
+          value: "v1.1.0"
         - name: NEW_FEATURE_ENABLED
-          value: "false"
+          value: "true"
         resources:
           requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
             memory: "128Mi"
             cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "200m"
         readinessProbe:
           httpGet:
             path: /health
             port: 3000
-          initialDelaySeconds: 10
+          initialDelaySeconds: 5
           periodSeconds: 5
         livenessProbe:
           httpGet:
             path: /health
             port: 3000
-          initialDelaySeconds: 30
+          initialDelaySeconds: 15
           periodSeconds: 10

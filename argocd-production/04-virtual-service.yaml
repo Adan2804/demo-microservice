@@ -5,28 +5,28 @@ metadata:
   name: demo-microservice-gateway-routing
   namespace: default
   labels:
-    experiment-active: "false"
+    experiment-active: "true"
 spec:
   hosts:
   - "*"
   gateways:
   - demo-microservice-gateway
   http:
-  # Todo el tráfico externo va a producción
+  # Todo el tráfico externo va al experimento
   - match:
     - uri:
         prefix: "/"
     route:
     - destination:
         host: demo-microservice-istio.default.svc.cluster.local
-        subset: stable
+        subset: experimental
       weight: 100
     headers:
       response:
         add:
-          x-routed-to: "production-stable"
+          x-routed-to: "experiment-candidate"
           x-istio-routing: "gateway-config"
-          x-experiment-status: "not-active"
+          x-experiment-status: "active"
     timeout: 30s
     retries:
       attempts: 2
@@ -40,28 +40,28 @@ metadata:
   name: demo-microservice-mesh-routing
   namespace: default
   labels:
-    experiment-active: "false"
+    experiment-active: "true"
 spec:
   hosts:
   - demo-microservice-istio.default.svc.cluster.local
   gateways:
   - mesh
   http:
-  # Todo el tráfico interno va a producción
+  # Todo el tráfico interno va al experimento
   - match:
     - uri:
         prefix: "/"
     route:
     - destination:
         host: demo-microservice-istio.default.svc.cluster.local
-        subset: stable
+        subset: experimental
       weight: 100
     headers:
       response:
         add:
-          x-routed-to: "production-stable"
+          x-routed-to: "experiment-candidate"
           x-istio-routing: "mesh-config"
-          x-experiment-status: "not-active"
+          x-experiment-status: "active"
     timeout: 30s
     retries:
       attempts: 2
