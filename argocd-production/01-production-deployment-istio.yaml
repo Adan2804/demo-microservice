@@ -32,14 +32,14 @@ spec:
     spec:
       containers:
       - name: demo-microservice
-        image: nginx:alpine
-        # Imagen temporal para demo - cambiar por demo-microservice:v1.0.0 cuando esté disponible
+        image: demo-microservice:v1.0.0
+        imagePullPolicy: Never  # Usar imagen local
         ports:
-        - containerPort: 80
+        - containerPort: 3000
           name: http
         env:
         - name: PORT
-          value: "80"
+          value: "3000"
         - name: APP_VERSION
           value: "production-stable-v1.0.0"
         - name: ENVIRONMENT
@@ -62,13 +62,13 @@ spec:
             cpu: "200m"
         readinessProbe:
           httpGet:
-            path: /
-            port: 80
+            path: /health
+            port: 3000
           initialDelaySeconds: 10
           periodSeconds: 5
         livenessProbe:
           httpGet:
-            path: /
-            port: 80
+            path: /health
+            port: 3000
           initialDelaySeconds: 30
           periodSeconds: 10
