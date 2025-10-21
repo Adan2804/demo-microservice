@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Script optimizado para instalar Istio en WSL/Ubuntu
-# Maneja problemas específicos de WSL y arquitectura
+# Script para instalar Istio en WSL/Linux
+# Descarga e instala la última versión estable de Istio
 set -e
 
-echo "🕸️  INSTALACIÓN DE ISTIO PARA WSL/UBUNTU"
-echo "========================================"
+echo "🕸️  INSTALACIÓN DE ISTIO SERVICE MESH"
+echo "====================================="
 
 cd "$(dirname "$0")/.."
 
@@ -14,24 +14,35 @@ show_help() {
     echo "Uso: $0 [OPCIONES]"
     echo ""
     echo "Opciones:"
-    echo "  --skip-observability Saltar instalación de herramientas de observabilidad"
-    echo "  -f, --force         Forzar reinstalación si ya existe"
-    echo "  -h, --help          Mostrar esta ayuda"
+    echo "  -v, --version VERSION   Versión específica de Istio (default: latest)"
+    echo "  --local-only           Instalar solo localmente (no en PATH)"
+    echo "  --with-addons          Instalar addons (Kiali, Grafana, Jaeger)"
+    echo "  -h, --help             Mostrar esta ayuda"
+    echo ""
+    echo "Ejemplos:"
+    echo "  $0                     # Instalar última versión"
+    echo "  $0 -v 1.20.1           # Instalar versión específica"
+    echo "  $0 --with-addons       # Instalar con addons de monitoreo"
 }
 
 # Valores por defecto
-INSTALL_OBSERVABILITY=true
-FORCE_INSTALL=false
+ISTIO_VERSION=""
+LOCAL_ONLY=false
+WITH_ADDONS=false
 
 # Procesar argumentos
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --skip-observability)
-            INSTALL_OBSERVABILITY=false
+        -v|--version)
+            ISTIO_VERSION="$2"
+            shift 2
+            ;;
+        --local-only)
+            LOCAL_ONLY=true
             shift
             ;;
-        -f|--force)
-            FORCE_INSTALL=true
+        --with-addons)
+            WITH_ADDONS=true
             shift
             ;;
         -h|--help)
@@ -46,308 +57,302 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Función para verificar si un comando existe
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-# Función para esperar que un deployment esté listo
-wait_for_deployment() {
-    local deployment=$1
-    local namespace=${2:-default}
-    echo "Esperando que $deployment esté listo en namespace $namespace..."
-    kubectl wait --for=condition=available deployment/$deployment -n $namespace --timeout=300s
-}
-
 # 1. VERIFICAR DEPENDENCIAS
 echo ""
 echo "📋 VERIFICANDO DEPENDENCIAS..."
 
-if ! command_exists kubectl; then
-    echo "❌ kubectl no está instalado"
-    exit 1
-fi
-
-if ! command_exists curl; then
+if ! command -v curl >/dev/null 2>&1; then
     echo "❌ curl no está instalado"
+    echo "Instala con: sudo apt update && sudo apt install curl"
     exit 1
 fi
 
-# Verificar que Kubernetes esté disponible
+if ! command -v kubectl >/dev/null 2>&1; then
+    echo "❌ kubectl no está instalado"
+    echo "Instala kubectl primero"
+    exit 1
+fi
+
+# Verificar conexión a cluster
 if ! kubectl cluster-info >/dev/null 2>&1; then
-    echo "❌ Cluster de Kubernetes no disponible"
-    echo "Asegúrate de que Minikube esté corriendo: minikube start"
+    echo "❌ No hay conexión a un cluster de Kubernetes"
+    echo "Inicia minikube primero: minikube start"
     exit 1
 fi
 
 echo "✅ Dependencias verificadas"
 
-# 2. DESCARGAR ISTIO
+# 2. DETERMINAR VERSIÓN DE ISTIO
 echo ""
-echo "📥 DESCARGANDO ISTIO..."
+echo "🔍 DETERMINANDO VERSIÓN DE ISTIO..."
 
-# Crear directorio para Istio si no existe
-mkdir -p ./bin
+if [ -z "$ISTIO_VERSION" ]; then
+    echo "Obteniendo última versión de Istio..."
+    ISTIO_VERSION=$(curl -s https://api.github.com/repos/istio/istio/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+    echo "📦 Última versión disponible: $ISTIO_VERSION"
+else
+    echo "📦 Versión especificada: $ISTIO_VERSION"
+fi
 
-# Descargar directamente la versión específica para Linux
-ISTIO_VERSION="1.27.1"
+# 3. DESCARGAR ISTIO
+echo ""
+echo "⬇️  DESCARGANDO ISTIO $ISTIO_VERSION..."
+
+# Crear directorio temporal
+TEMP_DIR=$(mktemp -d)
+cd "$TEMP_DIR"
+
+# Descargar Istio
+echo "Descargando desde GitHub..."
 ISTIO_URL="https://github.com/istio/istio/releases/download/${ISTIO_VERSION}/istio-${ISTIO_VERSION}-linux-amd64.tar.gz"
 
-echo "Descargando Istio ${ISTIO_VERSION}..."
-curl -L "$ISTIO_URL" -o "/tmp/istio-${ISTIO_VERSION}.tar.gz"
+if ! curl -L "$ISTIO_URL" -o "istio-${ISTIO_VERSION}-linux-amd64.tar.gz"; then
+    echo "❌ Error al descargar Istio"
+    echo "Verifica que la versión $ISTIO_VERSION existe"
+    exit 1
+fi
 
-# Extraer en directorio temporal
-TEMP_DIR=$(mktemp -d)
-tar -xzf "/tmp/istio-${ISTIO_VERSION}.tar.gz" -C "$TEMP_DIR"
+# Extraer archivo
+echo "Extrayendo archivo..."
+tar -xzf "istio-${ISTIO_VERSION}-linux-amd64.tar.gz"
+
+echo "✅ Istio descargado exitosamente"
+
+# 4. INSTALAR ISTIOCTL
+echo ""
+echo "📦 INSTALANDO ISTIOCTL..."
+
+# Volver al directorio del proyecto
+cd "$(dirname "$0")/.."
+
+# Crear directorio bin si no existe
+mkdir -p bin
 
 # Copiar istioctl al directorio local
 cp "$TEMP_DIR/istio-${ISTIO_VERSION}/bin/istioctl" ./bin/istioctl
 chmod +x ./bin/istioctl
 
-# Configurar PATH para esta sesión
-export PATH="$PWD/bin:$PATH"
-ISTIOCTL_PATH="./bin/istioctl"
+echo "✅ istioctl instalado en ./bin/istioctl"
 
-# Verificar instalación
-echo "Verificando istioctl..."
-if "$ISTIOCTL_PATH" version --client >/dev/null 2>&1; then
-    ISTIO_VERSION_INSTALLED=$("$ISTIOCTL_PATH" version --client --short 2>/dev/null)
-    echo "✅ istioctl instalado: $ISTIO_VERSION_INSTALLED"
-else
-    echo "⚠️  istioctl instalado pero con advertencias (normal en WSL)"
-fi
-
-# Limpiar archivos temporales
-rm -f "/tmp/istio-${ISTIO_VERSION}.tar.gz"
-
-# 3. VERIFICAR INSTALACIÓN EXISTENTE
-echo ""
-echo "🔍 VERIFICANDO INSTALACIÓN EXISTENTE DE ISTIO..."
-
-if kubectl get namespace istio-system >/dev/null 2>&1; then
-    echo "⚠️  Istio ya está instalado"
-    
-    if [ "$FORCE_INSTALL" = false ]; then
-        read -p "¿Deseas reinstalar Istio? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo "Instalación cancelada"
-            exit 0
-        fi
+# Instalar en PATH del sistema (si no es local-only)
+if [ "$LOCAL_ONLY" = false ]; then
+    if [ -w "/usr/local/bin" ] || sudo -n true 2>/dev/null; then
+        echo "Instalando istioctl en el sistema..."
+        sudo cp ./bin/istioctl /usr/local/bin/istioctl
+        echo "✅ istioctl instalado en /usr/local/bin"
+    else
+        echo "⚠️  No se pudo instalar en el sistema (permisos insuficientes)"
+        echo "Usando instalación local: ./bin/istioctl"
     fi
-    
-    echo "Desinstalando Istio existente..."
-    "$ISTIOCTL_PATH" uninstall --purge -y 2>/dev/null || true
-    kubectl delete namespace istio-system --ignore-not-found=true
-    
-    # Esperar que se elimine completamente
-    echo "Esperando que se complete la desinstalación..."
-    while kubectl get namespace istio-system >/dev/null 2>&1; do
-        sleep 5
-        echo "  Esperando..."
-    done
 fi
 
-# 4. INSTALAR ISTIO
+# 5. VERIFICAR INSTALACIÓN
 echo ""
-echo "🚀 INSTALANDO ISTIO..."
+echo "🔍 VERIFICANDO INSTALACIÓN..."
 
+# Verificar versión
+ISTIOCTL_PATH="./bin/istioctl"
+if command -v istioctl >/dev/null 2>&1; then
+    ISTIOCTL_PATH="istioctl"
+fi
+
+echo "Versión instalada:"
+"$ISTIOCTL_PATH" version --client
+
+echo "✅ Instalación verificada"
+
+# 6. INSTALAR ISTIO EN EL CLUSTER
+echo ""
+echo "🚀 INSTALANDO ISTIO EN EL CLUSTER..."
+
+# Verificar si Istio ya está instalado
+if kubectl get namespace istio-system >/dev/null 2>&1; then
+    echo "⚠️  Istio ya está instalado en el cluster"
+    read -p "¿Reinstalar Istio? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Desinstalando Istio anterior..."
+        "$ISTIOCTL_PATH" uninstall --purge -y || true
+        kubectl delete namespace istio-system --ignore-not-found=true
+        sleep 10
+    else
+        echo "⏭️  Manteniendo instalación existente"
+    fi
+fi
+
+# Instalar Istio con configuración demo
 echo "Instalando Istio con perfil demo..."
 "$ISTIOCTL_PATH" install --set values.defaultRevision=default -y
 
-echo "✅ Istio instalado correctamente"
-
-# Verificar instalación
-echo "Verificando componentes de Istio..."
-wait_for_deployment istiod istio-system
-wait_for_deployment istio-ingressgateway istio-system
-
-# 5. CONFIGURAR NAMESPACE DEFAULT
-echo ""
-echo "🏷️  CONFIGURANDO NAMESPACE DEFAULT..."
-
+# Habilitar inyección automática de sidecar en namespace default
+echo "Habilitando inyección automática de sidecar..."
 kubectl label namespace default istio-injection=enabled --overwrite
-echo "✅ Namespace default configurado para inyección de sidecar"
 
-# 6. INSTALAR HERRAMIENTAS DE OBSERVABILIDAD
-if [ "$INSTALL_OBSERVABILITY" = true ]; then
+echo "✅ Istio instalado en el cluster"
+
+# 7. INSTALAR ADDONS (si se especifica)
+if [ "$WITH_ADDONS" = true ]; then
     echo ""
-    echo "📊 INSTALANDO HERRAMIENTAS DE OBSERVABILIDAD..."
+    echo "🔧 INSTALANDO ADDONS DE MONITOREO..."
     
-    # Usar los addons del directorio de Istio
+    # Descargar manifiestos de addons
     ADDONS_DIR="$TEMP_DIR/istio-${ISTIO_VERSION}/samples/addons"
     
-    echo "📈 Instalando Prometheus..."
-    kubectl apply -f "$ADDONS_DIR/prometheus.yaml"
-    
-    echo "📊 Instalando Grafana..."
-    kubectl apply -f "$ADDONS_DIR/grafana.yaml"
-    
-    echo "🕸️  Instalando Kiali..."
+    echo "Instalando Kiali (Service Mesh Dashboard)..."
     kubectl apply -f "$ADDONS_DIR/kiali.yaml"
     
-    echo "🔍 Instalando Jaeger..."
+    echo "Instalando Grafana (Métricas)..."
+    kubectl apply -f "$ADDONS_DIR/grafana.yaml"
+    
+    echo "Instalando Jaeger (Tracing)..."
     kubectl apply -f "$ADDONS_DIR/jaeger.yaml"
     
-    # Esperar que los servicios estén listos
-    echo ""
-    echo "⏳ Esperando que los servicios de observabilidad estén listos..."
+    echo "Instalando Prometheus (Métricas)..."
+    kubectl apply -f "$ADDONS_DIR/prometheus.yaml"
+    
+    echo "Esperando que los addons estén listos..."
     sleep 30
     
-    # Verificar servicios (sin fallar si no están listos)
-    echo "Verificando servicios de observabilidad..."
-    kubectl wait --for=condition=available deployment/prometheus -n istio-system --timeout=180s || echo "⚠️  Prometheus tardando"
-    kubectl wait --for=condition=available deployment/grafana -n istio-system --timeout=180s || echo "⚠️  Grafana tardando"
-    kubectl wait --for=condition=available deployment/kiali -n istio-system --timeout=180s || echo "⚠️  Kiali tardando"
-    kubectl wait --for=condition=available deployment/jaeger -n istio-system --timeout=180s || echo "⚠️  Jaeger tardando"
+    # Verificar que los addons estén funcionando
+    echo "Verificando estado de los addons..."
+    kubectl get pods -n istio-system
     
-    echo "✅ Herramientas de observabilidad instaladas"
+    echo "✅ Addons instalados"
 fi
 
-# Limpiar directorio temporal
-rm -rf "$TEMP_DIR"
-
-# 7. VERIFICAR INSTALACIÓN
+# 8. VERIFICAR ESTADO DEL CLUSTER
 echo ""
-echo "🔍 VERIFICANDO INSTALACIÓN FINAL..."
+echo "🔍 VERIFICANDO ESTADO DEL CLUSTER..."
 
-echo "Estado de Istio:"
-"$ISTIOCTL_PATH" verify-install || echo "⚠️  Verificación con advertencias (normal)"
-
-echo ""
-echo "Pods en istio-system:"
+echo "Pods de Istio:"
 kubectl get pods -n istio-system
 
 echo ""
-echo "Servicios en istio-system:"
+echo "Servicios de Istio:"
 kubectl get svc -n istio-system
 
-# 8. CREAR SCRIPTS DE GESTIÓN
+echo ""
+echo "Análisis de configuración:"
+"$ISTIOCTL_PATH" analyze
+
+# 9. CREAR SCRIPTS DE GESTIÓN
 echo ""
 echo "📝 CREANDO SCRIPTS DE GESTIÓN..."
 
-# Script para iniciar port-forwards
+# Script para iniciar dashboards
 cat > ./scripts/start-istio-dashboards.sh << 'EOF'
 #!/bin/bash
-echo "🔌 Iniciando port-forwards para Istio..."
+echo "🚀 Iniciando dashboards de Istio..."
 
-# Función para iniciar port-forward en background
-start_port_forward() {
-    local service=$1
-    local local_port=$2
-    local remote_port=$3
-    local namespace=${4:-istio-system}
-    
-    if kubectl get svc "$service" -n "$namespace" >/dev/null 2>&1; then
-        echo "Port-forward: $service -> localhost:$local_port"
-        kubectl port-forward -n "$namespace" svc/"$service" "$local_port:$remote_port" > /dev/null 2>&1 &
-        echo $! >> /tmp/istio-pf-pids.txt
-    else
-        echo "⚠️  Servicio $service no encontrado en namespace $namespace"
-    fi
-}
-
-# Limpiar archivo de PIDs
-> /tmp/istio-pf-pids.txt
-
-# Port-forwards para herramientas de observabilidad
-start_port_forward "kiali" "20001" "20001"
-start_port_forward "grafana" "3000" "3000"
-start_port_forward "jaeger" "16686" "16686"
-start_port_forward "prometheus" "9090" "9090"
-
-# Port-forward para Istio Gateway
-start_port_forward "istio-ingressgateway" "8080" "80"
-
-echo ""
-echo "✅ Port-forwards configurados"
-echo "PIDs guardados en: /tmp/istio-pf-pids.txt"
-EOF
-
-chmod +x ./scripts/start-istio-dashboards.sh
-
-# Script para detener port-forwards
-cat > ./scripts/stop-istio-dashboards.sh << 'EOF'
-#!/bin/bash
-echo "🛑 Deteniendo port-forwards de Istio..."
-
-# Detener por patrón
-pkill -f "kubectl port-forward.*istio-system" 2>/dev/null || true
-
-# Detener por PIDs guardados
-if [ -f "/tmp/istio-pf-pids.txt" ]; then
-    while read pid; do
-        if [ -n "$pid" ]; then
-            kill "$pid" 2>/dev/null || true
-        fi
-    done < /tmp/istio-pf-pids.txt
-    rm -f /tmp/istio-pf-pids.txt
+# Detectar istioctl
+ISTIOCTL_PATH=""
+if [ -f "./bin/istioctl" ]; then
+    ISTIOCTL_PATH="./bin/istioctl"
+elif command -v istioctl >/dev/null 2>&1; then
+    ISTIOCTL_PATH="istioctl"
+else
+    echo "❌ istioctl no encontrado"
+    exit 1
 fi
-
-echo "✅ Port-forwards detenidos"
-EOF
-
-chmod +x ./scripts/stop-istio-dashboards.sh
-
-# 9. CONFIGURAR PORT-FORWARDS INICIALES
-echo ""
-echo "🔌 CONFIGURANDO ACCESOS INICIALES..."
 
 # Limpiar port-forwards existentes
 pkill -f "kubectl port-forward.*istio-system" 2>/dev/null || true
 sleep 2
 
-# Iniciar port-forwards
-if [ "$INSTALL_OBSERVABILITY" = true ]; then
-    ./scripts/start-istio-dashboards.sh
-    
-    if [ -f "/tmp/istio-pf-pids.txt" ]; then
-        PIDS=$(cat /tmp/istio-pf-pids.txt | tr '\n' ' ')
-        echo "Port-forwards activos (PIDs: $PIDS)"
-    fi
-fi
+echo "Iniciando Kiali Dashboard..."
+kubectl port-forward -n istio-system svc/kiali 20001:20001 > /dev/null 2>&1 &
+KIALI_PID=$!
 
-# 10. RESUMEN FINAL
-echo ""
-echo "🎉 ISTIO INSTALADO EXITOSAMENTE EN WSL"
-echo "====================================="
-echo ""
-echo "✅ Istio Core: Instalado y funcionando"
-echo "✅ Sidecar Injection: Habilitado en namespace default"
+echo "Iniciando Grafana Dashboard..."
+kubectl port-forward -n istio-system svc/grafana 3000:3000 > /dev/null 2>&1 &
+GRAFANA_PID=$!
 
-if [ "$INSTALL_OBSERVABILITY" = true ]; then
-    echo "✅ Herramientas de observabilidad: Instaladas"
-fi
+echo "Iniciando Jaeger Dashboard..."
+kubectl port-forward -n istio-system svc/jaeger 16686:16686 > /dev/null 2>&1 &
+JAEGER_PID=$!
 
-echo "✅ istioctl: Disponible en ./bin/istioctl"
+sleep 5
 
 echo ""
-echo "🌐 DASHBOARDS DISPONIBLES:"
+echo "✅ Dashboards iniciados:"
+echo "• Kiali (Service Mesh): http://localhost:20001"
+echo "• Grafana (Métricas): http://localhost:3000"
+echo "• Jaeger (Tracing): http://localhost:16686"
+echo ""
+echo "PIDs: Kiali=$KIALI_PID, Grafana=$GRAFANA_PID, Jaeger=$JAEGER_PID"
+echo "Para detener: pkill -f 'kubectl port-forward.*istio-system'"
+EOF
 
-if [ "$INSTALL_OBSERVABILITY" = true ]; then
-    echo "• Kiali (Service Mesh): http://localhost:20001"
-    echo "• Grafana (Métricas): http://localhost:3000"
-    echo "• Jaeger (Tracing): http://localhost:16686"
-    echo "• Prometheus (Métricas): http://localhost:9090"
+chmod +x ./scripts/start-istio-dashboards.sh
+
+# Script para detener dashboards
+cat > ./scripts/stop-istio-dashboards.sh << 'EOF'
+#!/bin/bash
+echo "🛑 Deteniendo dashboards de Istio..."
+
+# Detener port-forwards
+pkill -f "kubectl port-forward.*istio-system" 2>/dev/null || true
+
+echo "✅ Dashboards detenidos"
+EOF
+
+chmod +x ./scripts/stop-istio-dashboards.sh
+
+# 10. LIMPIAR ARCHIVOS TEMPORALES
+echo ""
+echo "🧹 LIMPIANDO ARCHIVOS TEMPORALES..."
+
+rm -rf "$TEMP_DIR"
+
+echo "✅ Archivos temporales eliminados"
+
+# 11. RESUMEN FINAL
+echo ""
+echo "🎉 INSTALACIÓN DE ISTIO COMPLETADA"
+echo "=================================="
+echo ""
+echo "✅ Istio $ISTIO_VERSION instalado"
+echo "✅ istioctl disponible en ./bin/istioctl"
+if [ "$LOCAL_ONLY" = false ] && command -v istioctl >/dev/null 2>&1; then
+    echo "✅ istioctl disponible en el sistema"
 fi
-
-echo "• Istio Gateway: http://localhost:8080"
-
+echo "✅ Istio instalado en el cluster"
+echo "✅ Inyección automática habilitada en namespace default"
+if [ "$WITH_ADDONS" = true ]; then
+    echo "✅ Addons de monitoreo instalados"
+fi
+echo ""
+echo "🌐 COMPONENTES INSTALADOS:"
+echo "• Istio Control Plane (istiod)"
+echo "• Istio Ingress Gateway"
+if [ "$WITH_ADDONS" = true ]; then
+    echo "• Kiali (Service Mesh Dashboard)"
+    echo "• Grafana (Métricas)"
+    echo "• Jaeger (Distributed Tracing)"
+    echo "• Prometheus (Métricas)"
+fi
 echo ""
 echo "🛠️  COMANDOS ÚTILES:"
-echo "• Verificar instalación: ./bin/istioctl verify-install"
-echo "• Analizar configuración: ./bin/istioctl analyze"
-echo "• Estado de proxies: ./bin/istioctl proxy-status"
+echo "• Verificar instalación: $ISTIOCTL_PATH version"
+echo "• Analizar configuración: $ISTIOCTL_PATH analyze"
+echo "• Estado de proxies: $ISTIOCTL_PATH proxy-status"
+if [ "$WITH_ADDONS" = true ]; then
+    echo "• Iniciar dashboards: ./scripts/start-istio-dashboards.sh"
+    echo "• Detener dashboards: ./scripts/stop-istio-dashboards.sh"
+fi
 echo ""
-echo "📊 GESTIÓN DE DASHBOARDS:"
-echo "• Iniciar dashboards: ./scripts/start-istio-dashboards.sh"
-echo "• Detener dashboards: ./scripts/stop-istio-dashboards.sh"
+echo "📁 ARCHIVOS CREADOS:"
+echo "• bin/istioctl - Cliente de Istio"
+if [ "$WITH_ADDONS" = true ]; then
+    echo "• scripts/start-istio-dashboards.sh - Iniciar dashboards"
+    echo "• scripts/stop-istio-dashboards.sh - Detener dashboards"
+fi
 echo ""
 echo "🚀 PRÓXIMOS PASOS:"
-echo "1. Ejecutar aplicaciones: ./scripts/00-init-complete-environment.sh"
-echo "2. Crear experimentos: ./scripts/01-create-experiment.sh"
-echo "3. Monitorear en Kiali: http://localhost:20001"
+echo "1. Inicializar entorno: ./scripts/00-init-complete-environment.sh"
+echo "2. Crear experimento: ./scripts/01-create-experiment.sh"
+echo "3. Configurar ArgoCD: ./scripts/03-setup-argocd.sh"
 echo ""
-echo "💡 NOTA PARA WSL:"
-echo "Si tienes problemas con port-forwards, usa:"
-echo "kubectl port-forward -n istio-system svc/kiali 20001:20001"
+echo "💡 NOTA:"
+echo "Istio está listo para usar con tu aplicación de microservicios."
+echo "La inyección automática de sidecar está habilitada en el namespace default."

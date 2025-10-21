@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-gateway
+  namespace: #{namespace}#
+  labels:
+    app: demo-microservice-gateway
+    service: demo-microservice-gateway
+    deployment-type: gateway-managed
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    service.kubernetes.io/topology-aware-hints: auto
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice-gateway
+  sessionAffinity: None
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-gateway-headless
+  namespace: #{namespace}#
+  labels:
+    app: demo-microservice-gateway
+    service: demo-microservice-gateway-headless
+    deployment-type: gateway-managed
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice-gateway
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-gateway-metrics
+  namespace: #{namespace}#
+  labels:
+    app: demo-microservice-gateway
+    service: demo-microservice-gateway-metrics
+    deployment-type: gateway-managed
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/actuator/prometheus"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: metrics
+  selector:
+    app: demo-microservice-gateway

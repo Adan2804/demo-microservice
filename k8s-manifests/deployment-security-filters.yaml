@@ -1,0 +1,158 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-filters
+  namespace: #{namespace}#
+  labels:
+    app: security-filters
+    component: gateway
+    version: #{version}#
+    dt-release-version: #{dt_release_version}#
+    dt-build-version: #{dt_build_version}#
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    argocd.argoproj.io/sync-wave: "2"
+    checksum/config: #{config_checksum}#
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: security-filters
+  template:
+    metadata:
+      labels:
+        app: security-filters
+        component: gateway
+        version: #{version}#
+        dt-release-version: #{dt_release_version}#
+        dt-build-version: #{dt_build_version}#
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/actuator/prometheus"
+        checksum/config: #{config_checksum}#
+    spec:
+      containers:
+      - name: security-filters
+        image: springcloudgateway/spring-cloud-gateway:3.1.0
+        ports:
+        - containerPort: 8080
+          name: gateway
+          protocol: TCP
+        - containerPort: 8081
+          name: management
+          protocol: TCP
+        env:
+        - name: TARGET_URI
+          valueFrom:
+            configMapKeyRef:
+              name: security-filters-config
+              key: TARGET_URI
+        - name: GATEWAY_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: security-filters-config
+              key: GATEWAY_PORT
+        - name: MANAGEMENT_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: security-filters-config
+              key: MANAGEMENT_PORT
+        - name: APP_VERSION
+          value: "#{version}#"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "production"
+        - name: SERVER_PORT
+          value: "8080"
+        - name: MANAGEMENT_SERVER_PORT
+          value: "8081"
+        - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+          value: "health,info,metrics,prometheus,gateway"
+        - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
+          value: "always"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_ID
+          value: "demo-microservice-route"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_URI
+          value: "#{target_uri}#"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_PREDICATES_0
+          value: "Path=/demo/**"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_0
+          value: "AddResponseHeader=X-Gateway-Version,#{version}#"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_1
+          value: "AddResponseHeader=X-Routed-By,security-filters"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_2
+          value: "RemoveRequestHeader=X-Internal-Token"
+        - name: SPRING_CLOUD_GATEWAY_GLOBALCORS_CORSCONFIGURATIONS___ALLOWEDORIGINS
+          value: "*"
+        - name: SPRING_CLOUD_GATEWAY_GLOBALCORS_CORSCONFIGURATIONS___ALLOWEDMETHODS
+          value: "GET,POST,PUT,DELETE,OPTIONS"
+        - name: SPRING_CLOUD_GATEWAY_GLOBALCORS_CORSCONFIGURATIONS___ALLOWEDHEADERS
+          value: "*"
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+      volumes:
+      - name: config-volume
+        configMap:
+          name: security-filters-config
+      terminationGracePeriodSeconds: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: security-filters
+  namespace: #{namespace}#
+  labels:
+    app: security-filters
+    service: security-filters
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: gateway
+  - port: 8081
+    targetPort: 8081
+    protocol: TCP
+    name: management
+  selector:
+    app: security-filters

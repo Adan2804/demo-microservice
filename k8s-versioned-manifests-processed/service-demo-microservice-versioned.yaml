@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-v-1-0-0
+  namespace: demo-app
+  labels:
+    app: demo-microservice
+    app-version: v-1-0-0
+    service: demo-microservice-versioned
+    version: v-1-0-0
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    service.version: "v-1-0-0"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    app-version: v-1-0-0
+
+---
+# Service estable que siempre apunta a la versión actual
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-stable
+  namespace: demo-app
+  labels:
+    app: demo-microservice
+    service: demo-microservice-stable
+    version: stable
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    service.version: "stable-v-1-0-0"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    app-version: v-1-0-0
+
+---
+# Service headless para discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-v-1-0-0-headless
+  namespace: demo-app
+  labels:
+    app: demo-microservice
+    app-version: v-1-0-0
+    service: demo-microservice-headless
+    version: v-1-0-0
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+    app-version: v-1-0-0

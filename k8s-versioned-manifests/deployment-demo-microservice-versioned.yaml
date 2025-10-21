@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-#{version}#
+  namespace: #{namespace}#
+  labels:
+    app: demo-microservice
+    app-version: #{version}#
+    version: #{version}#
+    dt-release-version: #{dt_release_version}#
+    dt-build-version: #{dt_build_version}#
+    deployment-strategy: versioned
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    argocd.argoproj.io/sync-wave: "2"
+    version.deployment: "#{version}#"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: demo-microservice
+      app-version: #{version}#
+  template:
+    metadata:
+      labels:
+        app: demo-microservice
+        app-version: #{version}#
+        version: #{version}#
+        dt-release-version: #{dt_release_version}#
+        dt-build-version: #{dt_build_version}#
+        deployment-strategy: versioned
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+        version.pod: "#{version}#"
+        config.checksum: "#{config_checksum}#"
+    spec:
+      containers:
+      - name: demo-microservice
+        image: #{image}#
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: APP_VERSION
+          value: "#{version}#"
+        - name: SERVICE_VERSION
+          value: "#{version}#"
+        - name: DEPLOYMENT_VERSION
+          value: "#{version}#"
+        - name: TARGET_URI
+          value: "#{target_uri}#"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "production"
+        - name: SERVER_PORT
+          value: "8080"
+        - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+          value: "health,info,metrics,prometheus"
+        - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
+          value: "always"
+        # Variables específicas para versionado
+        - name: SERVICE_NAME
+          value: "demo-microservice-#{version}#"
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+      terminationGracePeriodSeconds: 30

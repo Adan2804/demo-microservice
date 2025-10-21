@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice
+  namespace: #{namespace}#
+  labels:
+    app: demo-microservice
+    service: demo-microservice
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-headless
+  namespace: #{namespace}#
+  labels:
+    app: demo-microservice
+    service: demo-microservice-headless
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice

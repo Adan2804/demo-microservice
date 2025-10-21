@@ -1,0 +1,106 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-microservice-gateway-app
+  namespace: argocd
+  labels:
+    app: demo-microservice-gateway
+    managed-by: argocd
+    deployment-type: gateway-managed
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: demo-deployments
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/your-org/demo-microservice-config.git'
+    path: k8s-gateway-manifests
+    targetRevision: HEAD
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: #{namespace}#
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    - RespectIgnoreDifferences=true
+    - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /metadata/annotations/deployment.kubernetes.io~1revision
+    - /spec/replicas
+  - group: ""
+    kind: Service
+    jsonPointers:
+    - /spec/clusterIP
+    - /spec/clusterIPs
+  - group: ""
+    kind: ConfigMap
+    jsonPointers:
+    - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: demo-microservice-project
+  namespace: argocd
+  labels:
+    project: demo-microservice
+spec:
+  description: "Demo Microservice Project for Gateway-based deployments"
+  sourceRepos:
+  - 'https://github.com/your-org/demo-microservice-config.git'
+  - 'https://github.com/your-org/demo-microservice.git'
+  destinations:
+  - namespace: demo-app
+    server: 'https://kubernetes.default.svc'
+  - namespace: demo-staging
+    server: 'https://kubernetes.default.svc'
+  - namespace: demo-production
+    server: 'https://kubernetes.default.svc'
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: ConfigMap
+  - group: ''
+    kind: Service
+  - group: ''
+    kind: Secret
+  - group: apps
+    kind: Deployment
+  - group: apps
+    kind: ReplicaSet
+  - group: networking.k8s.io
+    kind: Ingress
+  roles:
+  - name: admin
+    description: "Admin access to demo microservice project"
+    policies:
+    - p, proj:demo-microservice-project:admin, applications, *, demo-microservice-project/*, allow
+    - p, proj:demo-microservice-project:admin, repositories, *, *, allow
+    groups:
+    - demo-team-admins
+  - name: developer
+    description: "Developer access to demo microservice project"
+    policies:
+    - p, proj:demo-microservice-project:developer, applications, get, demo-microservice-project/*, allow
+    - p, proj:demo-microservice-project:developer, applications, sync, demo-microservice-project/*, allow
+    groups:
+    - demo-team-developers

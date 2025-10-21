@@ -1,0 +1,226 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-filters-versioned-config
+  namespace: demo-app
+  labels:
+    app: security-filters
+    component: versioned-routing
+    version: v-1-0-0
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    config.version: "v-1-0-0"
+data:
+  # Configuración principal del gateway con versionado dinámico
+  GATEWAY_ROUTES_JSON: |
+    {
+      "routes": [
+        {
+          "id": "super-app-p-ch-ms-transactional-credit-card-monetary-transaction-cash-advance-fee",
+          "predicates": [
+            {
+              "name": "Path",
+              "args": {
+                "_genkey_0": "/api/v1/security-filters/ch-ms-transactional-credit-card-monetary/credit-cards/cash-advance/fee"
+              }
+            },
+            {
+              "name": "Header",
+              "args": {
+                "regexp": "APP",
+                "header": "channel"
+              }
+            }
+          ],
+          "filters": [
+            {
+              "name": "AddRequestHeader",
+              "args": {
+                "name": "transaction-code",
+                "value": "0533"
+              }
+            },
+            {
+              "name": "AddRequestHeader",
+              "args": {
+                "name": "language",
+                "value": "ENG"
+              }
+            },
+            {
+              "name": "RemoveRequestHeader",
+              "args": {
+                "name": "document-id"
+              }
+            },
+            {
+              "name": "RemoveRequestHeader",
+              "args": {
+                "name": "document-id-original"
+              }
+            },
+            {
+              "name": "RemoveRequestHeader",
+              "args": {
+                "name": "document-type"
+              }
+            },
+            {
+              "name": "RemoveRequestHeader",
+              "args": {
+                "name": "sua-session"
+              }
+            },
+            {
+              "name": "AuthorizationEdgeFilter",
+              "args": {
+                "scope": "APP",
+                "toHeaderClaims": "documentNumber,documentExternalNumber,documentType,suaSession"
+              }
+            },
+            {
+              "name": "MapRequestHeader",
+              "args": {
+                "fromHeader": "suaSession",
+                "toHeader": "sua-session"
+              }
+            },
+            {
+              "name": "MapRequestHeader",
+              "args": {
+                "fromHeader": "documentExternalNumber",
+                "toHeader": "document-id"
+              }
+            },
+            {
+              "name": "MapRequestHeader",
+              "args": {
+                "fromHeader": "documentNumber",
+                "toHeader": "document-id-original"
+              }
+            },
+            {
+              "name": "MapRequestHeader",
+              "args": {
+                "fromHeader": "documentType",
+                "toHeader": "document-type"
+              }
+            },
+            {
+              "name": "SecurityFunctionalFilter",
+              "args": {
+                "name": "channel-transaction-validation",
+                "transactionCode": "0533"
+              }
+            },
+            {
+              "name": "AddResponseHeader",
+              "args": {
+                "name": "X-Gateway-Version",
+                "value": "v-1-0-0"
+              }
+            },
+            {
+              "name": "AddResponseHeader",
+              "args": {
+                "name": "X-Target-Service-Version",
+                "value": "v-1-0-0"
+              }
+            },
+            {
+              "name": "RewritePath",
+              "args": {
+                "regexp": "/api/v1/security-filters/ch-ms-transactional-credit-card-monetary/credit-cards/cash-advance/fee",
+                "replacement": "/api/v3/ch-ms-transactional-credit-card-monetary/credit-cards/cash-advance-fee"
+              }
+            }
+          ],
+          "uri": "http://ch-ms-transactional-credit-card-monetary-v-1-0-0.demo-app.svc.cluster.local",
+          "order": 0
+        },
+        {
+          "id": "demo-microservice-route-versioned",
+          "predicates": [
+            {
+              "name": "Path",
+              "args": {
+                "_genkey_0": "/demo/**"
+              }
+            }
+          ],
+          "filters": [
+            {
+              "name": "AddResponseHeader",
+              "args": {
+                "name": "X-Gateway-Version",
+                "value": "v-1-0-0"
+              }
+            },
+            {
+              "name": "AddResponseHeader",
+              "args": {
+                "name": "X-Routed-By",
+                "value": "security-filters-versioned"
+              }
+            },
+            {
+              "name": "AddResponseHeader",
+              "args": {
+                "name": "X-Target-Service",
+                "value": "demo-microservice-v-1-0-0"
+              }
+            }
+          ],
+          "uri": "http://demo-microservice-v-1-0-0.demo-app.svc.cluster.local",
+          "order": 1
+        }
+      ],
+      "default_filters": [
+        {
+          "name": "AddResponseHeader",
+          "args": {
+            "name": "X-Gateway-Timestamp",
+            "value": "2025-10-21T21:56:23Z"
+          }
+        },
+        {
+          "name": "AddResponseHeader",
+          "args": {
+            "name": "X-Service-Version",
+            "value": "v-1-0-0"
+          }
+        }
+      ]
+    }
+  
+  # Configuración de versionado por headers
+  VERSION_ROUTING_CONFIG: |
+    version_routing:
+      enabled: true
+      default_version: "v-1-0-0"
+      header_based_routing:
+        - header_name: "app-version"
+          header_value: "1.0.0"
+          target_version: "v-1-0-0"
+        - header_name: "app-version" 
+          header_value: "1.1.0"
+          target_version: "v-1-1-0"
+        - header_name: "app-version"
+          header_value: "2.0.0"
+          target_version: "v-2-0-0"
+      staging_routing:
+        enabled: true
+        staging_header: "staging"
+        staging_value: "true"
+        staging_version: "v-1-0-0"
+  
+  # Variables de entorno para el gateway
+  SPRING_CLOUD_GATEWAY_ROUTES_0_ID: "versioned-microservice-route"
+  SPRING_CLOUD_GATEWAY_ROUTES_0_URI: "http://demo-microservice-v-1-0-0.demo-app.svc.cluster.local"
+  SPRING_CLOUD_GATEWAY_ROUTES_0_PREDICATES_0: "Path=/demo/**"
+  SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_0: "AddResponseHeader=X-Gateway-Version,v-1-0-0"
+  SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_1: "AddResponseHeader=X-Service-Version,v-1-0-0"
+  
+  # Configuración de logging para debugging
+  LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY: "DEBUG"
+  LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB: "INFO"

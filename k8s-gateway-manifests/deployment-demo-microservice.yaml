@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-gateway
+  namespace: #{namespace}#
+  labels:
+    app: demo-microservice-gateway
+    version: #{version}#
+    dt-release-version: #{dt_release_version}#
+    dt-build-version: #{dt_build_version}#
+    deployment-type: gateway-managed
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    argocd.argoproj.io/sync-wave: "1"
+    app.kubernetes.io/managed-by: "argocd"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: demo-microservice-gateway
+  template:
+    metadata:
+      labels:
+        app: demo-microservice-gateway
+        version: #{version}#
+        dt-release-version: #{dt_release_version}#
+        dt-build-version: #{dt_build_version}#
+        deployment-type: gateway-managed
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+        config.kubernetes.io/depends-on: "configmap/security-filters-config"
+    spec:
+      containers:
+      - name: demo-microservice
+        image: #{image}#
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: APP_VERSION
+          value: "#{version}#"
+        - name: TARGET_URI
+          value: "#{target_uri}#"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "production"
+        - name: SERVER_PORT
+          value: "8080"
+        - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+          value: "health,info,metrics,prometheus"
+        - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
+          value: "always"
+        - name: SPRING_APPLICATION_NAME
+          value: "demo-microservice-gateway"
+        - name: LOGGING_LEVEL_COM_DEMO
+          value: "INFO"
+        - name: DEPLOYMENT_TYPE
+          value: "gateway-managed"
+        - name: BUILD_NUMBER
+          value: "#{dt_build_version}#"
+        - name: RELEASE_VERSION
+          value: "#{dt_release_version}#"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+              - ALL
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 1000

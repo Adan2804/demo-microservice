@@ -1,0 +1,207 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-filters-versioned
+  namespace: #{namespace}#
+  labels:
+    app: security-filters
+    component: versioned-gateway
+    version: #{version}#
+    dt-release-version: #{dt_release_version}#
+    dt-build-version: #{dt_build_version}#
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    argocd.argoproj.io/sync-wave: "3"
+    checksum/config: #{config_checksum}#
+    version.gateway: "#{version}#"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: security-filters
+      component: versioned-gateway
+  template:
+    metadata:
+      labels:
+        app: security-filters
+        component: versioned-gateway
+        version: #{version}#
+        dt-release-version: #{dt_release_version}#
+        dt-build-version: #{dt_build_version}#
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/actuator/prometheus"
+        checksum/config: #{config_checksum}#
+        version.gateway: "#{version}#"
+    spec:
+      containers:
+      - name: security-filters
+        image: springcloudgateway/spring-cloud-gateway:3.1.0
+        ports:
+        - containerPort: 8080
+          name: gateway
+          protocol: TCP
+        - containerPort: 8081
+          name: management
+          protocol: TCP
+        env:
+        # Variables de versionado
+        - name: GATEWAY_VERSION
+          value: "#{version}#"
+        - name: TARGET_SERVICE_VERSION
+          value: "#{version}#"
+        - name: CURRENT_NAMESPACE
+          value: "#{namespace}#"
+        
+        # Variables de configuración básica
+        - name: APP_VERSION
+          value: "#{version}#"
+        - name: SPRING_PROFILES_ACTIVE
+          value: "production"
+        - name: SERVER_PORT
+          value: "8080"
+        - name: MANAGEMENT_SERVER_PORT
+          value: "8081"
+        - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
+          value: "health,info,metrics,prometheus,gateway,routes"
+        - name: MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS
+          value: "always"
+        
+        # Configuración de rutas dinámicas basada en versión
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_ID
+          value: "demo-microservice-versioned-route"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_URI
+          value: "http://demo-microservice-#{version}#.#{namespace}#.svc.cluster.local"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_PREDICATES_0
+          value: "Path=/demo/**"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_0
+          value: "AddResponseHeader=X-Gateway-Version,#{version}#"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_1
+          value: "AddResponseHeader=X-Service-Version,#{version}#"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_2
+          value: "AddResponseHeader=X-Routed-By,security-filters-versioned"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_0_FILTERS_3
+          value: "AddResponseHeader=X-Target-Service,demo-microservice-#{version}#"
+        
+        # Ruta para el microservicio bancario (ejemplo real)
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_1_ID
+          value: "ch-ms-transactional-credit-card-monetary-versioned"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_1_URI
+          value: "http://ch-ms-transactional-credit-card-monetary-#{version}#.#{namespace}#.svc.cluster.local"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_1_PREDICATES_0
+          value: "Path=/api/v1/security-filters/ch-ms-transactional-credit-card-monetary/**"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_1_PREDICATES_1
+          value: "Header=channel,APP"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_1_FILTERS_0
+          value: "AddRequestHeader=transaction-code,0533"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_1_FILTERS_1
+          value: "AddRequestHeader=language,ENG"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_1_FILTERS_2
+          value: "AddResponseHeader=X-Gateway-Version,#{version}#"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_1_FILTERS_3
+          value: "AddResponseHeader=X-Service-Version,#{version}#"
+        - name: SPRING_CLOUD_GATEWAY_ROUTES_1_FILTERS_4
+          value: "RewritePath=/api/v1/security-filters/ch-ms-transactional-credit-card-monetary/(?<segment>.*),/api/v3/ch-ms-transactional-credit-card-monetary/$\\{segment}"
+        
+        # Configuración de CORS
+        - name: SPRING_CLOUD_GATEWAY_GLOBALCORS_CORSCONFIGURATIONS___ALLOWEDORIGINS
+          value: "*"
+        - name: SPRING_CLOUD_GATEWAY_GLOBALCORS_CORSCONFIGURATIONS___ALLOWEDMETHODS
+          value: "GET,POST,PUT,DELETE,OPTIONS"
+        - name: SPRING_CLOUD_GATEWAY_GLOBALCORS_CORSCONFIGURATIONS___ALLOWEDHEADERS
+          value: "*"
+        
+        # Configuración de logging
+        - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY
+          valueFrom:
+            configMapKeyRef:
+              name: security-filters-versioned-config
+              key: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_GATEWAY
+        - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB
+          valueFrom:
+            configMapKeyRef:
+              name: security-filters-versioned-config
+              key: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_WEB
+        
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+          readOnly: true
+        - name: routes-config
+          mountPath: /routes
+          readOnly: true
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+      volumes:
+      - name: config-volume
+        configMap:
+          name: security-filters-versioned-config
+      - name: routes-config
+        configMap:
+          name: security-filters-versioned-config
+          items:
+          - key: GATEWAY_ROUTES_JSON
+            path: routes.json
+      terminationGracePeriodSeconds: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: security-filters-versioned
+  namespace: #{namespace}#
+  labels:
+    app: security-filters
+    service: security-filters-versioned
+    version: #{version}#
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+    service.version: "#{version}#"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: gateway
+  - port: 8081
+    targetPort: 8081
+    protocol: TCP
+    name: management
+  selector:
+    app: security-filters
+    component: versioned-gateway

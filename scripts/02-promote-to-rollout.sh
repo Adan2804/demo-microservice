@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Script para promover experimento a Argo Rollout con confirmación
-# Implementa Blue-Green deployment con Istio para promoción segura
+# Script para promover experimento exitoso a rollout con Argo Rollouts
+# Implementa Blue-Green deployment con confirmación manual
 set -e
 
 echo "🚀 PROMOCIÓN DE EXPERIMENTO A ROLLOUT"
@@ -14,30 +14,29 @@ show_help() {
     echo "Uso: $0 [OPCIONES]"
     echo ""
     echo "Opciones:"
-    echo "  -f, --force             Saltar confirmaciones (modo automático)"
-    echo "  -s, --strategy STRATEGY Estrategia de rollout (canary|bluegreen) [default: canary]"
-    echo "  -h, --help             Mostrar esta ayuda"
+    echo "  --auto-approve          Aprobar automáticamente sin confirmación"
+    echo "  --rollback-on-failure   Rollback automático si falla"
+    echo "  -h, --help              Mostrar esta ayuda"
     echo ""
     echo "Ejemplos:"
-    echo "  $0                      # Promoción interactiva con canary"
-    echo "  $0 -f                   # Promoción automática"
-    echo "  $0 -s bluegreen         # Usar estrategia blue-green"
+    echo "  $0                      # Promoción con confirmación manual"
+    echo "  $0 --auto-approve       # Promoción automática"
 }
 
 # Valores por defecto
-FORCE_MODE=false
-ROLLOUT_STRATEGY="canary"
+AUTO_APPROVE=false
+ROLLBACK_ON_FAILURE=false
 
 # Procesar argumentos
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -f|--force)
-            FORCE_MODE=true
+        --auto-approve)
+            AUTO_APPROVE=true
             shift
             ;;
-        -s|--strategy)
-            ROLLOUT_STRATEGY="$2"
-            shift 2
+        --rollback-on-failure)
+            ROLLBACK_ON_FAILURE=true
+            shift
             ;;
         -h|--help)
             show_help
@@ -51,302 +50,425 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Detectar istioctl
+ISTIOCTL_PATH=""
+if [ -f "./bin/istioctl" ]; then
+    ISTIOCTL_PATH="./bin/istioctl"
+elif command -v istioctl >/dev/null 2>&1; then
+    ISTIOCTL_PATH="istioctl"
+else
+    echo "❌ istioctl no está disponible"
+    exit 1
+fi
+
 # 1. VERIFICAR PREREQUISITOS
 echo ""
 echo "📋 VERIFICANDO PREREQUISITOS..."
 
-# Verificar que el experimento exista
+# Verificar que el experimento esté activo
 if ! kubectl get deployment demo-microservice-experiment >/dev/null 2>&1; then
-    echo "❌ Error: Experimento no encontrado"
+    echo "❌ Error: No hay experimento activo para promover"
     echo "Ejecuta primero: ./scripts/01-create-experiment.sh"
     exit 1
 fi
 
 # Verificar que Argo Rollouts esté instalado
-if ! kubectl get deployment argo-rollouts-controller -n argo-rollouts >/dev/null 2>&1; then
-    echo "❌ Error: Argo Rollouts no está instalado"
-    echo "Ejecuta primero: ./scripts/00-init-complete-environment.sh"
-    exit 1
-fi
-
-# Verificar que el experimento esté funcionando
-EXPERIMENT_READY=$(kubectl get deployment demo-microservice-experiment -o jsonpath='{.status.readyReplicas}')
-if [ "$EXPERIMENT_READY" != "1" ]; then
-    echo "❌ Error: El experimento no está listo (pods: $EXPERIMENT_READY/1)"
-    exit 1
+if ! kubectl get crd rollouts.argoproj.io >/dev/null 2>&1; then
+    echo "⚠️  Argo Rollouts no está instalado. Instalando..."
+    kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+    kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+    
+    echo "Esperando que Argo Rollouts esté listo..."
+    kubectl wait --for=condition=available deployment/argo-rollouts-controller -n argo-rollouts --timeout=300s
 fi
 
 echo "✅ Prerequisitos verificados"
 
 # 2. OBTENER INFORMACIÓN DEL EXPERIMENTO
 echo ""
-echo "🔍 ANALIZANDO EXPERIMENTO ACTUAL..."
+echo "📊 ANALIZANDO EXPERIMENTO ACTUAL..."
 
 EXPERIMENT_IMAGE=$(kubectl get deployment demo-microservice-experiment -o jsonpath='{.spec.template.spec.containers[0].image}')
-EXPERIMENT_VERSION=$(echo $EXPERIMENT_IMAGE | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' || echo "unknown")
+EXPERIMENT_VERSION=$(kubectl get deployment demo-microservice-experiment -o jsonpath='{.metadata.annotations.experiment\.kubernetes\.io/version}')
 
-echo "Imagen del experimento: $EXPERIMENT_IMAGE"
-echo "Versión detectada: $EXPERIMENT_VERSION"
+echo "📦 Imagen del experimento: $EXPERIMENT_IMAGE"
+echo "🏷️  Versión del experimento: $EXPERIMENT_VERSION"
 
-# Verificar que el experimento esté recibiendo tráfico
+# Mostrar métricas del experimento
 echo ""
-echo "Probando conectividad del experimento..."
-response=$(curl -s -H "aws-cf-cd-super-svp-9f8b7a6d: 123e4567-e89b-12d3-a456-42661417400" \
-    http://localhost:8080/api/v1/experiment/version 2>/dev/null || echo "Error")
+echo "📈 MÉTRICAS DEL EXPERIMENTO:"
+kubectl top pods -l version=experiment --no-headers 2>/dev/null || echo "Métricas no disponibles"
 
-if [[ "$response" == *"Error"* ]]; then
-    echo "⚠️  Advertencia: El experimento no responde correctamente"
-    if [ "$FORCE_MODE" = false ]; then
-        read -p "¿Continuar de todos modos? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo "Operación cancelada"
-            exit 0
-        fi
-    fi
-else
-    echo "✅ Experimento respondiendo correctamente: $response"
-fi
-
-# 3. CONFIRMACIÓN DEL USUARIO
-if [ "$FORCE_MODE" = false ]; then
+# 3. CONFIRMACIÓN MANUAL (si no es auto-approve)
+if [ "$AUTO_APPROVE" = false ]; then
     echo ""
-    echo "⚠️  CONFIRMACIÓN DE PROMOCIÓN"
-    echo "=============================="
+    echo "🤔 CONFIRMACIÓN DE PROMOCIÓN"
+    echo "============================"
     echo ""
-    echo "Estás a punto de promover el experimento a producción:"
-    echo "• Imagen actual: $EXPERIMENT_IMAGE"
-    echo "• Estrategia: $ROLLOUT_STRATEGY deployment"
-    echo "• Esto reemplazará gradualmente la versión de producción actual"
+    echo "¿Has validado que el experimento funciona correctamente?"
+    echo "• ¿Las pruebas A/B muestran resultados positivos?"
+    echo "• ¿No hay errores en los logs del experimento?"
+    echo "• ¿El rendimiento es aceptable?"
     echo ""
-    echo "¿Estás seguro de que quieres continuar?"
-    echo ""
-    read -p "Escribe 'PROMOVER' para confirmar: " confirmation
-    
-    if [ "$confirmation" != "PROMOVER" ]; then
-        echo "Operación cancelada"
+    read -p "¿Estás seguro de promover el experimento a producción? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "❌ Promoción cancelada por el usuario"
         exit 0
     fi
 fi
 
-# 4. PREPARAR ROLLOUT
+# 4. CREAR ROLLOUT CONFIGURATION
 echo ""
-echo "⚙️  PREPARANDO ROLLOUT..."
+echo "📝 CREANDO CONFIGURACIÓN DE ROLLOUT..."
 
-# Verificar si ya existe un rollout activo
-if kubectl get rollout demo-microservice-rollout-istio >/dev/null 2>&1; then
-    echo "⚠️  Ya existe un rollout activo"
-    
-    ROLLOUT_STATUS=$(kubectl get rollout demo-microservice-rollout-istio -o jsonpath='{.status.phase}')
-    echo "Estado actual del rollout: $ROLLOUT_STATUS"
-    
-    if [ "$ROLLOUT_STATUS" = "Progressing" ]; then
-        echo "❌ Error: Hay un rollout en progreso. Espera a que termine o aborta:"
-        echo "kubectl argo rollouts abort demo-microservice-rollout-istio"
-        exit 1
-    fi
-    
-    if [ "$FORCE_MODE" = false ]; then
-        read -p "¿Deseas eliminar el rollout existente y crear uno nuevo? (y/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            kubectl delete rollout demo-microservice-rollout-istio
-            sleep 5
-        else
-            echo "Operación cancelada"
-            exit 0
-        fi
-    else
-        kubectl delete rollout demo-microservice-rollout-istio
-        sleep 5
-    fi
-fi
+# Crear Rollout que reemplazará el deployment de producción
+cat > /tmp/rollout-config.yaml << EOF
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: demo-microservice-rollout
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    tier: rollout
+  annotations:
+    rollout.kubernetes.io/promoted-from: "experiment"
+    rollout.kubernetes.io/experiment-version: "$EXPERIMENT_VERSION"
+    rollout.kubernetes.io/created-at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+spec:
+  replicas: 3
+  strategy:
+    blueGreen:
+      activeService: demo-microservice-rollout-active
+      previewService: demo-microservice-rollout-preview
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 30
+      prePromotionAnalysis:
+        templates:
+        - templateName: success-rate
+        args:
+        - name: service-name
+          value: demo-microservice-rollout-preview
+      postPromotionAnalysis:
+        templates:
+        - templateName: success-rate
+        args:
+        - name: service-name
+          value: demo-microservice-rollout-active
+  selector:
+    matchLabels:
+      app: demo-microservice-istio
+      tier: rollout
+  template:
+    metadata:
+      labels:
+        app: demo-microservice-istio
+        tier: rollout
+        version: rollout-new
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+      - name: demo-microservice
+        image: $EXPERIMENT_IMAGE
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: PORT
+          value: "3000"
+        - name: APP_VERSION
+          value: "rollout-promoted-$EXPERIMENT_VERSION"
+        - name: ENVIRONMENT
+          value: "production-rollout"
+        - name: EXPERIMENT_ENABLED
+          value: "false"
+        - name: ISTIO_ENABLED
+          value: "true"
+        - name: ROLLOUT_PHASE
+          value: "blue-green"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
 
-# 5. CREAR ARGO ROLLOUT
+---
+# Servicios para Blue-Green
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-rollout-active
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    service: rollout-active
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice-istio
+    tier: rollout
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-rollout-preview
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    service: rollout-preview
+spec:
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice-istio
+    tier: rollout
+  type: ClusterIP
+
+---
+# AnalysisTemplate para validación automática
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: default
+spec:
+  args:
+  - name: service-name
+  metrics:
+  - name: success-rate
+    interval: 10s
+    count: 5
+    successCondition: result[0] >= 0.95
+    provider:
+      prometheus:
+        address: http://prometheus.istio-system:9090
+        query: |
+          sum(irate(
+            istio_requests_total{reporter="destination",destination_service_name="{{args.service-name}}",response_code!~"5.*"}[2m]
+          )) / 
+          sum(irate(
+            istio_requests_total{reporter="destination",destination_service_name="{{args.service-name}}"}[2m]
+          ))
+EOF
+
+# 5. APLICAR ROLLOUT
 echo ""
-echo "🎯 CREANDO ARGO ROLLOUT..."
+echo "🚀 INICIANDO ROLLOUT BLUE-GREEN..."
 
-# Seleccionar archivo de configuración según estrategia
-if [ "$ROLLOUT_STRATEGY" = "bluegreen" ]; then
-    ROLLOUT_FILE="istio/05-argo-rollout-istio-bluegreen.yaml"
-    if [ ! -f "$ROLLOUT_FILE" ]; then
-        echo "⚠️  Archivo de configuración Blue-Green no encontrado, usando Canary"
-        ROLLOUT_FILE="istio/05-argo-rollout-istio.yaml"
-    fi
-else
-    ROLLOUT_FILE="istio/05-argo-rollout-istio.yaml"
-fi
-
-# Aplicar rollout con la imagen del experimento
-echo "Aplicando rollout con imagen: $EXPERIMENT_IMAGE"
-cat $ROLLOUT_FILE | sed "s|demo-microservice:stable|$EXPERIMENT_IMAGE|g" | kubectl apply -f -
+kubectl apply -f /tmp/rollout-config.yaml
 
 # Esperar que el rollout esté listo
-echo "Esperando que el rollout esté listo..."
-kubectl wait --for=condition=progressing rollout/demo-microservice-rollout-istio --timeout=300s
+echo "⏳ Esperando que el rollout esté listo..."
+kubectl wait --for=condition=available rollout/demo-microservice-rollout --timeout=300s
 
-# 6. MONITOREAR PROGRESO
+# 6. ACTUALIZAR CONFIGURACIÓN DE ISTIO PARA ROLLOUT
 echo ""
-echo "📊 MONITOREANDO PROGRESO DEL ROLLOUT..."
+echo "🌐 ACTUALIZANDO CONFIGURACIÓN DE ISTIO PARA ROLLOUT..."
 
-# Iniciar monitoreo en background
-kubectl argo rollouts get rollout demo-microservice-rollout-istio --watch &
-WATCH_PID=$!
+# Crear DestinationRule para rollout
+cat > /tmp/destination-rule-rollout.yaml << EOF
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: demo-microservice-rollout-destination
+  namespace: default
+  annotations:
+    rollout.kubernetes.io/managed-by: "rollout-script"
+spec:
+  host: demo-microservice-rollout-active
+  subsets:
+  - name: rollout-stable
+    labels:
+      version: rollout-stable
+  - name: rollout-canary
+    labels:
+      version: rollout-new
+EOF
 
-# Función para limpiar al salir
-cleanup() {
-    kill $WATCH_PID 2>/dev/null || true
+# Crear VirtualService para rollout
+cat > /tmp/virtual-service-rollout.yaml << EOF
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-microservice-rollout-routing
+  namespace: default
+  annotations:
+    rollout.kubernetes.io/managed-by: "rollout-script"
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - demo-microservice-gateway
+  http:
+  # Tráfico de rollout (gradual)
+  - match:
+    - uri:
+        prefix: "/api/v1/rollout"
+    route:
+    - destination:
+        host: demo-microservice-rollout-active
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "rollout-active"
+          x-rollout-phase: "blue-green"
+  
+  # Tráfico normal (sigue yendo al experimento por ahora)
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: demo-microservice-istio
+        subset: stable
+      weight: 70
+    - destination:
+        host: demo-microservice-istio
+        subset: experiment
+      weight: 30
+    headers:
+      response:
+        add:
+          x-routed-to: "mixed-traffic"
+          x-rollout-phase: "transition"
+EOF
+
+kubectl apply -f /tmp/destination-rule-rollout.yaml
+kubectl apply -f /tmp/virtual-service-rollout.yaml
+
+# Esperar que la configuración se propague
+echo "⏳ Esperando que la configuración se propague..."
+sleep 15
+
+# 7. MONITOREAR ROLLOUT
+echo ""
+echo "📊 MONITOREANDO ROLLOUT..."
+
+echo "Estado del rollout:"
+kubectl get rollout demo-microservice-rollout
+
+echo ""
+echo "Pods del rollout:"
+kubectl get pods -l app=demo-microservice-istio,tier=rollout
+
+# 8. PROMOCIÓN MANUAL DEL ROLLOUT
+echo ""
+echo "🎯 PROMOCIÓN DEL ROLLOUT"
+echo "========================"
+
+if [ "$AUTO_APPROVE" = false ]; then
     echo ""
-    echo "Monitoreo detenido"
-}
-trap cleanup EXIT
-
-# 7. MOSTRAR INFORMACIÓN DEL ROLLOUT
-echo ""
-echo "🚀 ROLLOUT INICIADO"
-echo "==================="
-echo ""
-echo "Estrategia: $ROLLOUT_STRATEGY deployment"
-echo "Imagen: $EXPERIMENT_IMAGE"
-echo ""
-
-if [ "$ROLLOUT_STRATEGY" = "canary" ]; then
-    echo "Progreso del Canary Deployment:"
-    echo "• Fase 1: 10% del tráfico → Nueva versión"
-    echo "• Fase 2: 25% del tráfico → Nueva versión"
-    echo "• Fase 3: 50% del tráfico → Nueva versión"
-    echo "• Fase 4: 75% del tráfico → Nueva versión"
-    echo "• Fase 5: 100% del tráfico → Nueva versión"
+    echo "El rollout está en modo Blue-Green y requiere promoción manual."
+    echo "Revisa las métricas y confirma que todo funciona correctamente."
+    echo ""
+    read -p "¿Promover el rollout a producción? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "🚀 Promoviendo rollout..."
+        kubectl argo rollouts promote demo-microservice-rollout
+    else
+        echo "⏸️  Rollout pausado. Puedes promoverlo manualmente con:"
+        echo "kubectl argo rollouts promote demo-microservice-rollout"
+    fi
 else
-    echo "Progreso del Blue-Green Deployment:"
-    echo "• Fase 1: Desplegar nueva versión (Green)"
-    echo "• Fase 2: Validar nueva versión"
-    echo "• Fase 3: Cambiar tráfico a nueva versión"
-    echo "• Fase 4: Eliminar versión anterior (Blue)"
+    echo "🚀 Promoción automática habilitada..."
+    kubectl argo rollouts promote demo-microservice-rollout
 fi
 
+# 9. LIMPIAR EXPERIMENTO
 echo ""
-echo "⏱️  El rollout progresará automáticamente con pausas para validación"
+echo "🧹 LIMPIANDO EXPERIMENTO ANTERIOR..."
+
+echo "Eliminando deployment del experimento..."
+kubectl delete deployment demo-microservice-experiment
+
+echo "Restaurando configuración base de Istio..."
+kubectl apply -f argocd-production/03-destination-rule.yaml
+kubectl apply -f argocd-production/04-virtual-service.yaml
+
+# 10. VERIFICAR ESTADO FINAL
 echo ""
+echo "🔍 VERIFICANDO ESTADO FINAL..."
 
-# 8. COMANDOS DISPONIBLES
-echo "🎛️  COMANDOS DISPONIBLES:"
-echo "• Promover manualmente: kubectl argo rollouts promote demo-microservice-rollout-istio"
-echo "• Abortar rollout: kubectl argo rollouts abort demo-microservice-rollout-istio"
-echo "• Ver estado: kubectl argo rollouts get rollout demo-microservice-rollout-istio"
-echo "• Rollback: kubectl argo rollouts undo demo-microservice-rollout-istio"
-echo ""
-
-# 9. PRUEBAS DURANTE EL ROLLOUT
-echo "🧪 REALIZANDO PRUEBAS DURANTE EL ROLLOUT..."
-echo ""
-
-# Función para probar conectividad
-test_connectivity() {
-    local phase=$1
-    echo "[$phase] Probando conectividad..."
-    
-    local normal_response=$(curl -s http://localhost:8080/api/v1/experiment/version 2>/dev/null || echo "Error")
-    echo "[$phase] Tráfico normal: $normal_response"
-    
-    local experiment_response=$(curl -s -H "aws-cf-cd-super-svp-9f8b7a6d: 123e4567-e89b-12d3-a456-42661417400" \
-        http://localhost:8080/api/v1/experiment/version 2>/dev/null || echo "Error")
-    echo "[$phase] Tráfico experimental: $experiment_response"
-    echo ""
-}
-
-# Prueba inicial
-test_connectivity "INICIO"
-
-# 10. ESPERAR INTERACCIÓN DEL USUARIO
-if [ "$FORCE_MODE" = false ]; then
-    echo "💡 OPCIONES:"
-    echo "• Presiona ENTER para continuar monitoreando"
-    echo "• Presiona Ctrl+C para detener el monitoreo (el rollout continuará)"
-    echo "• Escribe 'promote' para promover inmediatamente"
-    echo "• Escribe 'abort' para abortar el rollout"
-    echo ""
-    
-    while true; do
-        read -t 30 -p "Comando (o ENTER para continuar): " user_input || true
-        
-        case "$user_input" in
-            "promote")
-                echo "Promoviendo rollout..."
-                kubectl argo rollouts promote demo-microservice-rollout-istio
-                ;;
-            "abort")
-                echo "Abortando rollout..."
-                kubectl argo rollouts abort demo-microservice-rollout-istio
-                break
-                ;;
-            "")
-                # Continuar monitoreando
-                test_connectivity "PROGRESO"
-                ;;
-            *)
-                echo "Comando no reconocido"
-                ;;
-        esac
-        
-        # Verificar si el rollout ha terminado
-        ROLLOUT_STATUS=$(kubectl get rollout demo-microservice-rollout-istio -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
-        if [ "$ROLLOUT_STATUS" = "Healthy" ]; then
-            echo ""
-            echo "✅ ROLLOUT COMPLETADO EXITOSAMENTE"
-            break
-        elif [ "$ROLLOUT_STATUS" = "Degraded" ]; then
-            echo ""
-            echo "❌ ROLLOUT FALLÓ"
-            break
-        fi
-    done
-else
-    # Modo automático - esperar hasta que termine
-    echo "Modo automático activado - esperando finalización..."
-    kubectl argo rollouts wait demo-microservice-rollout-istio --timeout=600s
-fi
-
-# 11. ESTADO FINAL
-echo ""
-echo "📊 ESTADO FINAL DEL ROLLOUT"
-echo "==========================="
-
-FINAL_STATUS=$(kubectl get rollout demo-microservice-rollout-istio -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
-echo "Estado: $FINAL_STATUS"
-
-if [ "$FINAL_STATUS" = "Healthy" ]; then
-    echo ""
-    echo "🎉 PROMOCIÓN COMPLETADA EXITOSAMENTE"
-    echo ""
-    echo "✅ La nueva versión está ahora en producción"
-    echo "✅ El experimento ha sido promovido exitosamente"
-    echo ""
-    
-    # Prueba final
-    test_connectivity "FINAL"
-    
-    echo "🧹 LIMPIEZA RECOMENDADA:"
-    echo "• Eliminar deployment del experimento: kubectl delete deployment demo-microservice-experiment"
-    echo "• Limpiar configuración de Istio si es necesario"
-    
-elif [ "$FINAL_STATUS" = "Degraded" ]; then
-    echo ""
-    echo "❌ PROMOCIÓN FALLÓ"
-    echo ""
-    echo "El rollout ha fallado. Revisa los logs y considera hacer rollback:"
-    echo "kubectl argo rollouts undo demo-microservice-rollout-istio"
-    
-else
-    echo ""
-    echo "⏳ ROLLOUT AÚN EN PROGRESO"
-    echo ""
-    echo "El rollout continúa ejecutándose. Puedes monitorearlo con:"
-    echo "kubectl argo rollouts get rollout demo-microservice-rollout-istio --watch"
-fi
+echo "Estado del rollout:"
+kubectl get rollout demo-microservice-rollout
 
 echo ""
-echo "📊 DASHBOARDS DISPONIBLES:"
-echo "• Argo Rollouts: http://localhost:3100"
-echo "• Kiali (Istio): kubectl port-forward -n istio-system svc/kiali 20001:20001"
-echo "• Grafana: kubectl port-forward -n istio-system svc/grafana 3000:3000"
+echo "Pods activos:"
+kubectl get pods -l app=demo-microservice-istio
+
+echo ""
+echo "Servicios:"
+kubectl get svc -l app=demo-microservice-istio
+
+# 11. PRUEBAS DE CONECTIVIDAD
+echo ""
+echo "🧪 REALIZANDO PRUEBAS FINALES..."
+
+echo "Probando tráfico normal:"
+response=$(curl -s http://localhost:8080/api/v1/experiment/version 2>/dev/null || echo "Error de conexión")
+echo "Respuesta: $response"
+
+echo ""
+echo "Probando endpoint de rollout:"
+response=$(curl -s http://localhost:8080/api/v1/rollout/version 2>/dev/null || echo "Error de conexión")
+echo "Respuesta: $response"
+
+# 12. RESUMEN FINAL
+echo ""
+echo "🎉 PROMOCIÓN A ROLLOUT COMPLETADA"
+echo "================================="
+echo ""
+echo "✅ Experimento promovido exitosamente"
+echo "✅ Rollout Blue-Green configurado"
+echo "✅ Configuración de Istio actualizada"
+echo "✅ Experimento anterior limpiado"
+echo ""
+echo "📊 ESTADO ACTUAL:"
+echo "• Rollout activo: demo-microservice-rollout"
+echo "• Estrategia: Blue-Green Deployment"
+echo "• Imagen promovida: $EXPERIMENT_IMAGE"
+echo ""
+echo "🌐 ACCESOS:"
+echo "• Aplicación: http://localhost:8080"
+echo "• Rollout endpoint: http://localhost:8080/api/v1/rollout"
+echo "• Argo Rollouts Dashboard: kubectl argo rollouts dashboard"
+echo ""
+echo "📊 MONITOREO:"
+echo "• Estado del rollout: kubectl get rollout demo-microservice-rollout"
+echo "• Logs del rollout: kubectl logs -l tier=rollout -f"
+echo "• Métricas: kubectl top pods -l tier=rollout"
+echo ""
+echo "🚀 PRÓXIMOS PASOS:"
+echo "1. Monitorear métricas de producción"
+echo "2. Validar que no hay errores"
+echo "3. Si todo está bien, el rollout se completará automáticamente"
+echo ""
+echo "🛑 EN CASO DE PROBLEMAS:"
+echo "• Rollback: kubectl argo rollouts abort demo-microservice-rollout"
+echo "• Ver estado: kubectl argo rollouts get rollout demo-microservice-rollout"

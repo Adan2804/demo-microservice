@@ -1,0 +1,171 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-filters-config
+  namespace: #{namespace}#
+  labels:
+    app: security-filters
+    component: configuration
+    version: #{version}#
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    config.kubernetes.io/local-config: "true"
+data:
+  # Target URI para el microservicio
+  TARGET_URI: "http://demo-microservice-gateway.#{namespace}#.svc.cluster.local"
+  
+  # Configuración del Gateway
+  GATEWAY_PORT: "8080"
+  MANAGEMENT_PORT: "8081"
+  
+  # Configuración de Spring Cloud Gateway en formato YAML
+  application.yml: |
+    spring:
+      application:
+        name: security-filters-gateway
+      cloud:
+        gateway:
+          routes:
+          - id: demo-microservice-route
+            uri: http://demo-microservice-gateway.#{namespace}#.svc.cluster.local
+            predicates:
+            - Path=/demo/**
+            - Method=GET,POST
+            filters:
+            - RemoveRequestHeader=X-Internal-Token
+            - AddResponseHeader=X-Gateway-Version,#{version}#
+            - AddResponseHeader=X-Routed-By,security-filters
+            - AddResponseHeader=X-Target-Service,demo-microservice-gateway
+            - AddResponseHeader=X-Route-ID,demo-microservice-route
+            metadata:
+              connect-timeout: 5000
+              response-timeout: 30000
+          - id: health-check-route
+            uri: http://demo-microservice-gateway.#{namespace}#.svc.cluster.local
+            predicates:
+            - Path=/health,/actuator/health
+            filters:
+            - AddResponseHeader=X-Health-Check,gateway-proxied
+            - AddResponseHeader=X-Gateway-Version,#{version}#
+          - id: info-route
+            uri: http://demo-microservice-gateway.#{namespace}#.svc.cluster.local
+            predicates:
+            - Path=/info,/actuator/info
+            filters:
+            - AddResponseHeader=X-Info-Check,gateway-proxied
+            - AddResponseHeader=X-Gateway-Version,#{version}#
+          default-filters:
+          - AddResponseHeader=X-Gateway-Timestamp,#{timestamp}#
+          - AddResponseHeader=X-Request-ID,#{request_id}#
+          - AddResponseHeader=X-Gateway-Instance,security-filters-gateway
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowed-origins: "*"
+                allowed-methods:
+                - GET
+                - POST
+                - PUT
+                - DELETE
+                - OPTIONS
+                allowed-headers: "*"
+                allow-credentials: false
+                max-age: 3600
+    
+    server:
+      port: 8080
+    
+    management:
+      server:
+        port: 8081
+      endpoints:
+        web:
+          exposure:
+            include: health,info,metrics,prometheus,gateway
+      endpoint:
+        health:
+          show-details: always
+    
+    logging:
+      level:
+        org.springframework.cloud.gateway: INFO
+        org.springframework.web: INFO
+        com.demo.security: INFO
+      pattern:
+        console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+  # Configuración de seguridad
+  security-config.yml: |
+    security:
+      enabled: true
+      rate-limiting:
+        enabled: true
+        requests-per-minute: 1000
+        burst-capacity: 100
+      authentication:
+        required: false
+        jwt-validation: false
+      headers:
+        x-frame-options: DENY
+        x-content-type-options: nosniff
+        x-xss-protection: "1; mode=block"
+        strict-transport-security: "max-age=31536000; includeSubDomains"
+        referrer-policy: "strict-origin-when-cross-origin"
+      
+  # Configuración de rutas en formato JSON (alternativa)
+  ROUTES_JSON: |
+    {
+      "routes": [
+        {
+          "id": "demo-microservice-route",
+          "uri": "http://demo-microservice-gateway.#{namespace}#.svc.cluster.local",
+          "predicates": [
+            {
+              "name": "Path",
+              "args": {
+                "pattern": "/demo/**"
+              }
+            },
+            {
+              "name": "Method",
+              "args": {
+                "methods": "GET,POST"
+              }
+            }
+          ],
+          "filters": [
+            {
+              "name": "RemoveRequestHeader",
+              "args": {
+                "name": "X-Internal-Token"
+              }
+            },
+            {
+              "name": "AddResponseHeader",
+              "args": {
+                "name": "X-Gateway-Version",
+                "value": "#{version}#"
+              }
+            },
+            {
+              "name": "AddResponseHeader",
+              "args": {
+                "name": "X-Routed-By",
+                "value": "security-filters"
+              }
+            },
+            {
+              "name": "AddResponseHeader",
+              "args": {
+                "name": "X-Target-Service",
+                "value": "demo-microservice-gateway"
+              }
+            }
+          ],
+          "metadata": {
+            "connect-timeout": 5000,
+            "response-timeout": 30000
+          }
+        }
+      ]
+    }
