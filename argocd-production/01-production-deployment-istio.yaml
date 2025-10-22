@@ -12,7 +12,7 @@ metadata:
   labels:
     app: demo-microservice-istio
     tier: production
-    version: stable
+    version: experimental
     managed-by: istio
   annotations:
     # Deployment gestionado por ArgoCD - Sin auto-sync para control manual
@@ -21,6 +21,8 @@ metadata:
 
 spec:
   replicas: 3
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 900
   selector:
     matchLabels:
       app: demo-microservice-istio
@@ -30,14 +32,19 @@ spec:
       labels:
         app: demo-microservice-istio
         tier: production
-        traffic-type: production
-        version: stable
+        traffic-type: experiment
+        version: experimental
         sidecar.istio.io/inject: "true"  # Inyección automática de Istio sidecar
     spec:
       containers:
       - name: demo-microservice
-        image: demo-microservice:stable
+        image: demo-microservice:experiment
         imagePullPolicy: Never  # Usar imagen local
+        lifecycle:
+          preStop:
+            exec:
+              # El pod esperará 15 segundos antes de apagarse
+              command: ["/bin/sh", "-c", "sleep 15"]
         ports:
         - containerPort: 3000
           name: http
@@ -45,18 +52,18 @@ spec:
         - name: PORT
           value: "3000"
         - name: APP_VERSION
-          value: "production-stable-istio-v1.0.0"
+          value: "experiment-candidate-istio-v1.1.0"
         - name: ENVIRONMENT
-          value: "production-istio"
+          value: "production-experiment-istio"
         - name: EXPERIMENT_ENABLED
-          value: "false"
+          value: "true"
         - name: ISTIO_ENABLED
           value: "true"
         # Variables básicas de experimento
         - name: DEPLOYMENT_VERSION
-          value: "v1.0.0"
+          value: "v1.1.0"
         - name: NEW_FEATURE_ENABLED
-          value: "false"
+          value: "true"
         resources:
           requests:
             memory: "64Mi"
