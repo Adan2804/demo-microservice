@@ -14,20 +14,23 @@ spec:
   - demo-microservice-gateway
   http:
   # Regla 1: A/B Testing - Tráfico con header específico va al experimento
-  - name: primary
+  # Cuando hay Argo Experiment activo, usa el service del experiment
+  # Cuando no hay experiment, esta regla falla gracefully y pasa a la siguiente
+  - name: experiment-routing
     match:
     - headers:
         aws-cf-cd-super-svp-9f8b7a6d:
           exact: "123e4567-e89b-12d3-a456-42661417400"
     route:
     - destination:
-        host: demo-microservice-istio.default.svc.cluster.local
-        subset: experiment
+        host: demo-microservice-experiment-experiment.default.svc.cluster.local
+        port:
+          number: 80
       weight: 100
     headers:
       response:
         add:
-          x-routed-to: "experiment-subset"
+          x-routed-to: "experiment-argo"
           x-istio-routing: "ab-testing-header"
           x-experiment-status: "active"
     timeout: 30s
@@ -36,7 +39,8 @@ spec:
       perTryTimeout: 10s
   
   # Regla 2: Tráfico normal va a stable (producción)
-  - match:
+  - name: production-routing
+    match:
     - uri:
         prefix: "/"
     route:

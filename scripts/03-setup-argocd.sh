@@ -77,6 +77,7 @@ kubectl delete deployment intelligent-proxy --ignore-not-found=true
 kubectl delete service demo-microservice-istio --ignore-not-found=true
 kubectl delete service demo-microservice-stable --ignore-not-found=true
 kubectl delete service demo-microservice-experiment --ignore-not-found=true
+kubectl delete service demo-microservice-simple --ignore-not-found=true
 kubectl delete service intelligent-proxy --ignore-not-found=true
 
 # Eliminar recursos de Istio antiguos
