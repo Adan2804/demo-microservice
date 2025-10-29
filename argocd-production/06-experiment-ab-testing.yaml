@@ -1,0 +1,250 @@
+# Argo Experiment para A/B Testing con enrutamiento por headers
+apiVersion: argoproj.io/v1alpha1
+kind: Experiment
+metadata:
+  name: demo-microservice-ab-experiment
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    experiment-type: ab-testing
+spec:
+  duration: 30m
+  progressDeadlineSeconds: 1800
+  
+  templates:
+  - name: stable
+    replicas: 3
+    selector:
+      matchLabels:
+        app: demo-microservice-istio
+        experiment: ab-test
+        version: stable
+    template:
+      metadata:
+        labels:
+          app: demo-microservice-istio
+          experiment: ab-test
+          version: stable
+      spec:
+        containers:
+        - name: demo-microservice
+          image: demo-microservice:stable
+          imagePullPolicy: Never
+          ports:
+          - containerPort: 8080
+            name: http
+          env:
+          - name: SERVER_PORT
+            value: "8080"
+          - name: APP_VERSION
+            value: "stable-v1.0.0"
+          - name: EXPERIMENT_ENABLED
+            value: "false"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+  
+  - name: experiment
+    replicas: 3
+    selector:
+      matchLabels:
+        app: demo-microservice-istio
+        experiment: ab-test
+        version: experiment
+    template:
+      metadata:
+        labels:
+          app: demo-microservice-istio
+          experiment: ab-test
+          version: experiment
+      spec:
+        containers:
+        - name: demo-microservice
+          image: demo-microservice:experiment
+          imagePullPolicy: Never
+          ports:
+          - containerPort: 8080
+            name: http
+          env:
+          - name: SERVER_PORT
+            value: "8080"
+          - name: APP_VERSION
+            value: "experiment-v2.0.0"
+          - name: EXPERIMENT_ENABLED
+            value: "true"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 15
+  
+  analyses:
+  - name: ab-comparison
+    templateName: ab-testing-analysis
+    args:
+    - name: stable-service
+      value: demo-microservice-ab-experiment-stable
+    - name: experiment-service
+      value: demo-microservice-ab-experiment-experiment
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: ab-testing-analysis
+  namespace: default
+spec:
+  args:
+  - name: stable-service
+  - name: experiment-service
+  
+  metrics:
+  - name: stable-success-rate
+    interval: 1m
+    count: 10
+    successCondition: result >= 0.95
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.istio-system:9090
+        query: |
+          sum(rate(
+            istio_requests_total{
+              destination_service_name="{{args.stable-service}}",
+              response_code!~"5.*"
+            }[1m]
+          )) 
+          / 
+          sum(rate(
+            istio_requests_total{
+              destination_service_name="{{args.stable-service}}"
+            }[1m]
+          ))
+  
+  - name: experiment-success-rate
+    interval: 1m
+    count: 10
+    successCondition: result >= 0.95
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.istio-system:9090
+        query: |
+          sum(rate(
+            istio_requests_total{
+              destination_service_name="{{args.experiment-service}}",
+              response_code!~"5.*"
+            }[1m]
+          )) 
+          / 
+          sum(rate(
+            istio_requests_total{
+              destination_service_name="{{args.experiment-service}}"
+            }[1m]
+          ))
+  
+  - name: latency-comparison
+    interval: 1m
+    count: 10
+    successCondition: result <= 1.2
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.istio-system:9090
+        query: |
+          histogram_quantile(0.95,
+            sum(rate(istio_request_duration_milliseconds_bucket{
+              destination_service_name="{{args.experiment-service}}"
+            }[1m])) by (le)
+          )
+          /
+          histogram_quantile(0.95,
+            sum(rate(istio_request_duration_milliseconds_bucket{
+              destination_service_name="{{args.stable-service}}"
+            }[1m])) by (le)
+          )
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-microservice-experiment-routing
+  namespace: default
+  labels:
+    experiment: ab-test
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - demo-microservice-gateway
+  http:
+  - match:
+    - headers:
+        aws-cf-cd-super-svp-9f8b7a6d:
+          exact: "123e4567-e89b-12d3-a456-42661417400"
+    route:
+    - destination:
+        host: demo-microservice-ab-experiment-experiment.default.svc.cluster.local
+        port:
+          number: 80
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "experiment"
+          x-experiment-id: "ab-test"
+          x-version: "experiment-v2.0.0"
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+  
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: demo-microservice-ab-experiment-stable.default.svc.cluster.local
+        port:
+          number: 80
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "stable"
+          x-experiment-id: "ab-test"
+          x-version: "stable-v1.0.0"
+    timeout: 30s
+    retries:
+      attempts: 2
+      perTryTimeout: 10s

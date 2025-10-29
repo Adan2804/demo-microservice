@@ -8,6 +8,11 @@ group = 'com.demo'
 version = '1.0.0'
 sourceCompatibility = '17'
 
+// Specify the main class to avoid ambiguity
+springBoot {
+    mainClass = 'com.demo.DemoMicroserviceApplication'
+}
+
 configurations {
     compileOnly {
         extendsFrom annotationProcessor

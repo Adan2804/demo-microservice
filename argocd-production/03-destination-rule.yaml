@@ -23,23 +23,22 @@ spec:
       interval: 30s
       baseEjectionTime: 30s
   subsets:
-  # Subset para pods experimentales (Istio)
-  - name: experimental
-    labels:
-      app: demo-microservice-istio
-      tier: production
-      version: experimental
-    trafficPolicy:
-      connectionPool:
-        tcp:
-          maxConnections: 25
-  # Subset para pods de producción estable (para rollback)
+  # Subset para pods de producción estable
   - name: stable
     labels:
       app: demo-microservice-istio
-      tier: production
       version: stable
     trafficPolicy:
       connectionPool:
         tcp:
           maxConnections: 50
+  
+  # Subset para pods experimentales (A/B Testing)
+  - name: experiment
+    labels:
+      app: demo-microservice-istio
+      version: experiment
+    trafficPolicy:
+      connectionPool:
+        tcp:
+          maxConnections: 25

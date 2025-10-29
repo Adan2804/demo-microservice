@@ -119,29 +119,32 @@ echo "✅ Limpieza completada"
 echo ""
 echo "🏗️  DESPLEGANDO APLICACIÓN CON ISTIO..."
 
-# Verificar y construir imágenes si es necesario
-if ! minikube image ls | grep -q demo-microservice:stable; then
-    echo "Construyendo imágenes con versiones diferentes..."
-    
-    # Configurar Docker para usar el daemon de Minikube
-    eval $(minikube docker-env)
-    
-    # Imagen STABLE para producción
-    docker build -t demo-microservice:stable \
-      --build-arg NODE_ENV=production \
-      --build-arg APP_VERSION=stable-v1.0.0 \
-      --build-arg EXPERIMENT_ENABLED=false \
-      .
-    
-    # Imagen EXPERIMENTAL para pruebas
-    docker build -t demo-microservice:experiment-candidate-v1.1.0 \
-      --build-arg NODE_ENV=production \
-      --build-arg APP_VERSION=experiment-candidate-v1.1.0 \
-      --build-arg EXPERIMENT_ENABLED=true \
-      .
-    
-    echo "✅ Imágenes construidas y cargadas en Minikube"
-fi
+# Configurar Docker para usar el daemon de Minikube SIEMPRE
+echo "Configurando Docker para usar el daemon de Minikube..."
+eval $(minikube docker-env)
+
+# Verificar y construir imágenes
+echo "Construyendo imágenes con versiones diferentes..."
+
+# Imagen STABLE para producción
+docker build -t demo-microservice:stable \
+  --build-arg NODE_ENV=production \
+  --build-arg APP_VERSION=stable-v1.0.0 \
+  --build-arg EXPERIMENT_ENABLED=false \
+  .
+
+# Imagen EXPERIMENTAL para pruebas
+docker build -t demo-microservice:experiment-candidate-v1.1.0 \
+  --build-arg NODE_ENV=production \
+  --build-arg APP_VERSION=experiment-candidate-v1.1.0 \
+  --build-arg EXPERIMENT_ENABLED=true \
+  .
+
+echo "✅ Imágenes construidas y cargadas en Minikube"
+
+# Verificar que las imágenes estén disponibles
+echo "Verificando imágenes en Minikube..."
+minikube image ls | grep demo-microservice || echo "⚠️  Advertencia: No se encontraron las imágenes"
 
 # Desplegar aplicación de producción con Istio
 echo "Desplegando aplicación de producción con Istio..."

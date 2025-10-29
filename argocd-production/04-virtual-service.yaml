@@ -1,32 +1,54 @@
-# VirtualService para Gateway (tráfico externo)
+# VirtualService para Gateway con A/B Testing
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: demo-microservice-gateway-routing
   namespace: default
   labels:
-    experiment-active: "true"
+    app: demo-microservice-istio
+    managed-by: argocd-rollouts
 spec:
   hosts:
   - "*"
   gateways:
   - demo-microservice-gateway
   http:
-  # Todo el tráfico externo va al experimento
+  # Regla 1: A/B Testing - Tráfico con header específico va al experimento
+  - name: primary
+    match:
+    - headers:
+        aws-cf-cd-super-svp-9f8b7a6d:
+          exact: "123e4567-e89b-12d3-a456-42661417400"
+    route:
+    - destination:
+        host: demo-microservice-istio.default.svc.cluster.local
+        subset: experiment
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "experiment-subset"
+          x-istio-routing: "ab-testing-header"
+          x-experiment-status: "active"
+    timeout: 30s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+  
+  # Regla 2: Tráfico normal va a stable (producción)
   - match:
     - uri:
         prefix: "/"
     route:
     - destination:
         host: demo-microservice-istio.default.svc.cluster.local
-        subset: experimental
+        subset: stable
       weight: 100
     headers:
       response:
         add:
-          x-routed-to: "experiment-candidate"
-          x-istio-routing: "gateway-config"
-          x-experiment-status: "active"
+          x-routed-to: "production-stable"
+          x-istio-routing: "production"
     timeout: 30s
     retries:
       attempts: 2

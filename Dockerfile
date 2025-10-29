@@ -1,3 +1,19 @@
+# Build stage
+FROM eclipse-temurin:17-jdk AS builder
+
+WORKDIR /build
+
+# Copy gradle files
+COPY build.gradle settings.gradle gradlew ./
+COPY gradle ./gradle
+
+# Copy source code
+COPY src ./src
+
+# Build the application
+RUN chmod +x gradlew && ./gradlew clean build -x test --no-daemon
+
+# Runtime stage
 FROM eclipse-temurin:17-jre
 
 # Metadata
@@ -8,8 +24,8 @@ LABEL description="Demo Microservice for ArgoCD Testing"
 # Create app directory
 WORKDIR /app
 
-# Copy the jar file (or create a dummy one for demo)
-COPY target/demo-microservice-*.jar app.jar 2>/dev/null || echo 'echo "Demo app running on version $APP_VERSION"' > app
+# Copy the jar from builder stage
+COPY --from=builder /build/build/libs/*.jar app.jar
 
 # Expose port
 EXPOSE 8080

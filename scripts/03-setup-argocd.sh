@@ -63,7 +63,7 @@ fi
 
 echo "✅ Kubernetes disponible"
 
-# 2. INSTALAR ARGOCD (si no está instalado)
+# 2. INSTALAR ARGOCD Y ARGO ROLLOUTS (si no están instalados)
 if [ "$SKIP_INSTALL" = false ]; then
     echo ""
     echo "🔧 INSTALANDO ARGOCD..."
@@ -84,6 +84,22 @@ if [ "$SKIP_INSTALL" = false ]; then
         wait_for_deployment argocd-repo-server argocd
         wait_for_deployment argocd-dex-server argocd
     fi
+    
+    # Instalar Argo Rollouts
+    echo ""
+    echo "🎲 INSTALANDO ARGO ROLLOUTS..."
+    kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+    
+    if kubectl get deployment argo-rollouts -n argo-rollouts >/dev/null 2>&1; then
+        echo "✅ Argo Rollouts ya está instalado"
+    else
+        echo "Instalando Argo Rollouts..."
+        kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+        
+        echo "Esperando que Argo Rollouts esté listo..."
+        sleep 20
+        wait_for_deployment argo-rollouts argo-rollouts
+    fi
 else
     echo ""
     echo "⏭️  SALTANDO INSTALACIÓN DE ARGOCD..."
@@ -94,6 +110,15 @@ else
         exit 1
     fi
     echo "✅ ArgoCD encontrado"
+    
+    # Verificar Argo Rollouts
+    if ! kubectl get deployment argo-rollouts -n argo-rollouts >/dev/null 2>&1; then
+        echo "⚠️  Argo Rollouts no está instalado, instalando..."
+        kubectl create namespace argo-rollouts --dry-run=client -o yaml | kubectl apply -f -
+        kubectl apply -n argo-rollouts -f https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml
+        wait_for_deployment argo-rollouts argo-rollouts
+    fi
+    echo "✅ Argo Rollouts encontrado"
 fi
 
 # 3. CONFIGURAR ACCESO A ARGOCD
@@ -157,6 +182,7 @@ kubectl delete application demo-microservice-experiment -n argocd --ignore-not-f
 kubectl delete application demo-microservice-istio -n argocd --ignore-not-found=true
 
 # Crear Application que apunta a argocd-production/ con configuración limpia
+# EXCLUYE archivos de experimentos (05 y 06) que se aplican manualmente
 cat > /tmp/demo-microservice-app.yaml << EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -169,6 +195,11 @@ spec:
     repoURL: 'https://github.com/Adan2804/demo-microservice.git'
     path: argocd-production
     targetRevision: HEAD
+    # Excluir archivos de experimentos y rollouts
+    directory:
+      exclude: |
+        05-rollout-ab-testing.yaml
+        06-experiment-ab-testing.yaml
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default
@@ -184,6 +215,15 @@ spec:
     - /metadata/annotations/deployment.kubernetes.io~1revision
     - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
     - /spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt
+  # Ignorar recursos de experimentos que se crean manualmente
+  - group: argoproj.io
+    kind: Experiment
+    jsonPointers:
+    - /status
+  - group: argoproj.io
+    kind: Rollout
+    jsonPointers:
+    - /status
 EOF
 
 echo "✅ Configuraciones creadas"

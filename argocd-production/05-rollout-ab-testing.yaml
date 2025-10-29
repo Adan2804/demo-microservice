@@ -1,0 +1,140 @@
+# Argo Rollout con estrategia Blue-Green
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: demo-microservice-rollout
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    managed-by: argocd
+spec:
+  replicas: 3
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: demo-microservice-istio
+  template:
+    metadata:
+      labels:
+        app: demo-microservice-istio
+    spec:
+      containers:
+      - name: demo-microservice
+        image: demo-microservice:stable
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: SERVER_PORT
+          value: "8080"
+        - name: APP_VERSION
+          value: "stable-v1.0.0"
+        - name: ENVIRONMENT
+          value: "production"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 15
+  
+  strategy:
+    blueGreen:
+      activeService: demo-microservice-istio-active
+      previewService: demo-microservice-istio-preview
+      autoPromotionEnabled: false
+      scaleDownDelaySeconds: 30
+      prePromotionAnalysis:
+        templates:
+        - templateName: success-rate
+        args:
+        - name: service-name
+          value: demo-microservice-istio-preview
+      postPromotionAnalysis:
+        templates:
+        - templateName: success-rate
+        args:
+        - name: service-name
+          value: demo-microservice-istio-active
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-istio-active
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice-istio
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-istio-preview
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice-istio
+  type: ClusterIP
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: default
+spec:
+  args:
+  - name: service-name
+  metrics:
+  - name: success-rate
+    interval: 30s
+    count: 5
+    successCondition: result >= 0.95
+    failureLimit: 3
+    provider:
+      prometheus:
+        address: http://prometheus.istio-system:9090
+        query: |
+          sum(rate(
+            istio_requests_total{
+              destination_service_name="{{args.service-name}}",
+              response_code!~"5.*"
+            }[1m]
+          )) 
+          / 
+          sum(rate(
+            istio_requests_total{
+              destination_service_name="{{args.service-name}}"
+            }[1m]
+          ))
