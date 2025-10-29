@@ -63,6 +63,41 @@ fi
 
 echo "✅ Kubernetes disponible"
 
+# 1.5. LIMPIAR DEPLOYMENTS ANTERIORES
+echo ""
+echo "🧹 LIMPIANDO DEPLOYMENTS ANTERIORES..."
+echo "Eliminando recursos de scripts anteriores (00-init, experimentos, etc.)..."
+
+# Eliminar deployments antiguos
+kubectl delete deployment demo-microservice-production-istio --ignore-not-found=true
+kubectl delete deployment demo-microservice-experiment-istio --ignore-not-found=true
+kubectl delete deployment intelligent-proxy --ignore-not-found=true
+
+# Eliminar servicios antiguos
+kubectl delete service demo-microservice-istio --ignore-not-found=true
+kubectl delete service demo-microservice-stable --ignore-not-found=true
+kubectl delete service demo-microservice-experiment --ignore-not-found=true
+kubectl delete service intelligent-proxy --ignore-not-found=true
+
+# Eliminar recursos de Istio antiguos
+kubectl delete virtualservice demo-microservice-gateway-routing --ignore-not-found=true
+kubectl delete virtualservice demo-microservice-mesh-routing --ignore-not-found=true
+kubectl delete virtualservice demo-microservice-rollout --ignore-not-found=true
+kubectl delete virtualservice demo-microservice-experiment-routing --ignore-not-found=true
+kubectl delete destinationrule demo-microservice-destination --ignore-not-found=true
+kubectl delete gateway demo-microservice-gateway --ignore-not-found=true
+
+# Eliminar experimentos y rollouts
+kubectl delete experiment --all --ignore-not-found=true
+kubectl delete rollout --all --ignore-not-found=true
+kubectl delete analysisrun --all --ignore-not-found=true
+kubectl delete analysistemplate --all --ignore-not-found=true
+
+# Eliminar ConfigMaps antiguos
+kubectl delete configmap intelligent-proxy-config --ignore-not-found=true
+
+echo "✅ Limpieza completada - Entorno listo para ArgoCD"
+
 # 2. INSTALAR ARGOCD Y ARGO ROLLOUTS (si no están instalados)
 if [ "$SKIP_INSTALL" = false ]; then
     echo ""
