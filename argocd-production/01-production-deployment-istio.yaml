@@ -11,7 +11,6 @@ metadata:
   namespace: default
   labels:
     app: demo-microservice-istio
-    tier: production
     version: stable
     managed-by: argocd
   annotations:
@@ -26,13 +25,11 @@ spec:
   selector:
     matchLabels:
       app: demo-microservice-istio
-      tier: production
+      version: stable
   template:
     metadata:
       labels:
         app: demo-microservice-istio
-        tier: production
-        traffic-type: production
         version: stable
         sidecar.istio.io/inject: "true"
     spec:

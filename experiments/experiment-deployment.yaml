@@ -1,0 +1,99 @@
+# Deployment experimental simple
+# Se despliega manualmente cuando quieres hacer A/B testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-experiment
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    version: experiment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: demo-microservice-istio
+      version: experiment
+  template:
+    metadata:
+      labels:
+        app: demo-microservice-istio
+        version: experiment
+    spec:
+      containers:
+      - name: demo-microservice
+        image: zadan04/demo-microservice:experiment
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: SERVER_PORT
+          value: "8080"
+        - name: APP_VERSION
+          value: "experiment-v2.0.0"
+        - name: EXPERIMENT_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 15
+
+---
+# VirtualService para enrutar por header
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-microservice-ab-routing
+  namespace: default
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - demo-microservice-gateway
+  http:
+  # Regla 1: Header específico → experiment
+  - match:
+    - headers:
+        aws-cf-cd-super-svp-9f8b7a6d:
+          exact: "123e4567-e89b-12d3-a456-42661417400"
+    route:
+    - destination:
+        host: demo-microservice-istio.default.svc.cluster.local
+        subset: experiment
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "experiment"
+          x-version: "experiment-v2.0.0"
+  
+  # Regla 2: Tráfico normal → stable
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: demo-microservice-istio.default.svc.cluster.local
+        subset: stable
+      weight: 100
+    headers:
+      response:
+        add:
+          x-routed-to: "stable"
+          x-version: "stable-v1.0.0"
