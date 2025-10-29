@@ -216,8 +216,8 @@ sleep 10
 kubectl delete application demo-microservice-experiment -n argocd --ignore-not-found=true
 kubectl delete application demo-microservice-istio -n argocd --ignore-not-found=true
 
-# Crear Application que apunta a argocd-production/ con configuración limpia
-# EXCLUYE archivos de experimentos (05 y 06) que se aplican manualmente
+# Crear Application que apunta a argocd-production/
+# Los archivos de experimentos (05 y 06) están en carpeta experiments/ separada
 cat > /tmp/demo-microservice-app.yaml << EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -230,19 +230,12 @@ spec:
     repoURL: 'https://github.com/Adan2804/demo-microservice.git'
     path: argocd-production
     targetRevision: HEAD
-    # Excluir archivos de experimentos y rollouts
-    directory:
-      exclude: |
-        05-rollout-ab-testing.yaml
-        06-experiment-ab-testing.yaml
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: default
   syncPolicy:
     syncOptions:
     - CreateNamespace=true
-    - RespectIgnoreDifferences=true
-    - ApplyOutOfSyncOnly=true
   ignoreDifferences:
   - group: apps
     kind: Deployment
@@ -250,15 +243,6 @@ spec:
     - /metadata/annotations/deployment.kubernetes.io~1revision
     - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
     - /spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt
-  # Ignorar recursos de experimentos que se crean manualmente
-  - group: argoproj.io
-    kind: Experiment
-    jsonPointers:
-    - /status
-  - group: argoproj.io
-    kind: Rollout
-    jsonPointers:
-    - /status
 EOF
 
 echo "✅ Configuraciones creadas"

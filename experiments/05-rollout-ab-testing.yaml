@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
       - name: demo-microservice
-        image: demo-microservice:stable
-        imagePullPolicy: Never
+        image: zadan04/demo-microservice:stable
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
           name: http

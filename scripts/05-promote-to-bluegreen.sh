@@ -31,7 +31,7 @@ eval $(minikube docker-env)
 
 echo ""
 echo "🚀 DESPLEGANDO BLUE-GREEN ROLLOUT..."
-kubectl apply -f argocd-production/05-rollout-ab-testing.yaml
+kubectl apply -f experiments/05-rollout-ab-testing.yaml
 
 echo ""
 echo "⏳ ESPERANDO QUE EL ROLLOUT ESTÉ LISTO..."

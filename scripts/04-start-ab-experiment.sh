@@ -42,7 +42,7 @@ fi
 
 echo ""
 echo "🚀 DESPLEGANDO ARGO EXPERIMENT..."
-kubectl apply -f argocd-production/06-experiment-ab-testing.yaml
+kubectl apply -f experiments/06-experiment-ab-testing.yaml
 
 echo ""
 echo "⏳ ESPERANDO QUE EL EXPERIMENT ESTÉ LISTO..."
