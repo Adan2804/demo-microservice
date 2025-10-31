@@ -1,6 +1,3 @@
-# Argo Experiment para A/B Testing
-# Duración: 1 día (24 horas)
-# Solo crea la versión experimental, la stable ya existe en producción
 apiVersion: argoproj.io/v1alpha1
 kind: Experiment
 metadata:
