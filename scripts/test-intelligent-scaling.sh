@@ -9,6 +9,25 @@ echo "🧪 PRUEBA DEL SISTEMA DE ESCALADO INTELIGENTE"
 echo "=============================================="
 echo ""
 
+# 1. Verificar que KEDA esté instalado
+echo "🔍 VERIFICANDO KEDA..."
+if ! kubectl get namespace keda >/dev/null 2>&1; then
+    echo "❌ KEDA no está instalado"
+    echo ""
+    read -p "¿Deseas instalar KEDA ahora? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        ./scripts/install-keda.sh
+    else
+        echo "❌ KEDA es requerido para el escalado inteligente"
+        exit 1
+    fi
+else
+    echo "✅ KEDA está instalado"
+fi
+
+echo ""
+
 # Colores
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
