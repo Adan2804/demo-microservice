@@ -29,7 +29,7 @@ spec:
     - type: cron
       metadata:
         timezone: "America/Bogota"
-        start: "20 17 * * *"             # 5:10 PM
+        start: "25 17 * * *"             # 5:10 PM
         end: "0 18 * * *"                # 6:00 PM
         desiredReplicas: "2"
     
@@ -39,7 +39,7 @@ spec:
       metadata:
         timezone: "America/Bogota"
         start: "0 18 * * *"              # 6:00 PM
-        end: "10 17 * * *"               # 5:10 PM del día siguiente
+        end: "25 17 * * *"               # 5:10 PM del día siguiente
         desiredReplicas: "3"
     
     # Trigger 3: Escalado adicional por CPU
@@ -96,8 +96,8 @@ data:
     ScaledObject Unificado para Escalado Inteligente
     
     Horarios:
-    - 5:10 PM - 6:00 PM: Downscale a 2 pods (si carga es baja)
-    - 6:00 PM - 5:10 PM: Upscale a 3 pods (garantizado)
+    - 5:25 PM - 6:00 PM: Downscale a 2 pods (si carga es baja)
+    - 6:00 PM - 5:25 PM: Upscale a 3 pods (garantizado)
     
     Comportamiento:
     - Durante 5:10 PM - 6:00 PM:
