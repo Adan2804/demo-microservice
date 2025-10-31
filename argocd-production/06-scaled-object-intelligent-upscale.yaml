@@ -12,7 +12,7 @@ metadata:
     managed-by: argocd
   annotations:
     scaledobject.keda.sh/transfer-hpa-ownership: "true"
-    description: "Escalado de prueba garantizado - asegura 3 pods fuera de 5PM-6PM"
+    description: "Escalado de prueba garantizado - asegura 3 pods fuera de 5:10PM-6PM"
 spec:
   scaleTargetRef:
     name: demo-microservice-production-istio
@@ -26,13 +26,13 @@ spec:
   cooldownPeriod: 60      # Espera solo 1 minuto antes de escalar (respuesta rápida)
   
   triggers:
-    # Trigger 1: Horario de prueba (6:00 PM - 5:00 PM del día siguiente)
-    # Activo todo el día EXCEPTO durante 5PM-6PM
+    # Trigger 1: Horario de prueba (6:00 PM - 5:10 PM del día siguiente)
+    # Activo todo el día EXCEPTO durante 5:10PM-6PM
     - type: cron
       metadata:
         timezone: "America/Bogota"      # UTC-5 (Colombia)
         start: "0 18 * * *"              # 6:00 PM - Inicia horario de upscale
-        end: "0 17 * * *"                # 5:00 PM - Termina horario de upscale
+        end: "10 17 * * *"               # 5:10 PM - Termina horario de upscale
         desiredReplicas: "3"             # Objetivo: mínimo 3 pods SIEMPRE
     
     # Trigger 2: Escalado adicional por CPU (si hay picos de demanda)
@@ -89,8 +89,8 @@ data:
   description: |
     ScaledObject para Escalado Garantizado Hacia Arriba (PRUEBA)
     
-    Periodo Activo: 6:00 PM - 5:00 PM (UTC-5, Colombia)
-    Todo el día EXCEPTO 5PM-6PM
+    Periodo Activo: 6:00 PM - 5:10 PM (UTC-5, Colombia)
+    Todo el día EXCEPTO 5:10PM-6PM
     
     Comportamiento:
     - A las 6:00 PM, garantiza mínimo 3 pods de forma inmediata
@@ -112,7 +112,7 @@ data:
     - Cumplimiento de SLA garantizado
   
   timezone: "America/Bogota"
-  active-hours: "18:00 - 17:00"
+  active-hours: "18:00 - 17:10"
   min-replicas: "3"
   max-replicas: "10"
   cpu-scale-threshold: "70%"
