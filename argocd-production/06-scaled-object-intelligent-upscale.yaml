@@ -32,7 +32,7 @@ spec:
       metadata:
         timezone: "America/Bogota"      # UTC-5 (Colombia)
         start: "0 18 * * *"              # 6:00 PM - Inicia horario de upscale
-        end: "10 17 * * *"               # 5:10 PM - Termina horario de upscale
+        end: "15 17 * * *"               # 5:10 PM - Termina horario de upscale
         desiredReplicas: "3"             # Objetivo: mínimo 3 pods SIEMPRE
     
     # Trigger 2: Escalado adicional por CPU (si hay picos de demanda)
