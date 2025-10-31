@@ -1,0 +1,124 @@
+# ScaledObject Unificado para Escalado Inteligente
+# Combina downscale (5:10 PM - 6:00 PM) y upscale (resto del día)
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: demo-microservice-intelligent-scaling
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    scaling-strategy: intelligent-unified
+    managed-by: argocd
+  annotations:
+    scaledobject.keda.sh/transfer-hpa-ownership: "true"
+    description: "Escalado inteligente unificado - 2 pods (5:10PM-6PM), 3 pods (resto del día)"
+spec:
+  scaleTargetRef:
+    name: demo-microservice-production-istio
+  
+  # Configuración base
+  minReplicaCount: 2      # Mínimo absoluto
+  maxReplicaCount: 10     # Máximo permitido
+  
+  pollingInterval: 30     # Evalúa cada 30 segundos
+  cooldownPeriod: 300     # Espera 5 minutos antes de escalar hacia abajo
+  
+  triggers:
+    # Trigger 1: Horario de downscale (5:10 PM - 6:00 PM)
+    # Durante este periodo, intenta reducir a 2 pods si la carga es baja
+    - type: cron
+      metadata:
+        timezone: "America/Bogota"
+        start: "20 17 * * *"             # 5:10 PM
+        end: "0 18 * * *"                # 6:00 PM
+        desiredReplicas: "2"
+    
+    # Trigger 2: Horario de upscale (6:00 PM - 5:10 PM del día siguiente)
+    # Durante este periodo, garantiza mínimo 3 pods
+    - type: cron
+      metadata:
+        timezone: "America/Bogota"
+        start: "0 18 * * *"              # 6:00 PM
+        end: "10 17 * * *"               # 5:10 PM del día siguiente
+        desiredReplicas: "3"
+    
+    # Trigger 3: Escalado adicional por CPU
+    # Escala más allá del mínimo si hay picos de demanda
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "70"                      # Escala hacia arriba si CPU > 70%
+    
+    # Trigger 4: Escalado adicional por Memoria
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "70"                      # Escala hacia arriba si Memoria > 70%
+  
+  # Configuración avanzada del HPA
+  advanced:
+    horizontalPodAutoscalerConfig:
+      name: demo-microservice-intelligent-hpa
+      behavior:
+        scaleUp:
+          # Política agresiva: escala rápidamente hacia arriba
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 2
+              periodSeconds: 60
+            - type: Percent
+              value: 50
+              periodSeconds: 60
+          selectPolicy: Max
+        
+        scaleDown:
+          # Política conservadora: escala lentamente hacia abajo
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
+          selectPolicy: Min
+
+---
+# ConfigMap con información del escalado unificado
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: intelligent-scaling-unified-config
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    scaling-strategy: intelligent-unified
+data:
+  description: |
+    ScaledObject Unificado para Escalado Inteligente
+    
+    Horarios:
+    - 5:10 PM - 6:00 PM: Downscale a 2 pods (si carga es baja)
+    - 6:00 PM - 5:10 PM: Upscale a 3 pods (garantizado)
+    
+    Comportamiento:
+    - Durante 5:10 PM - 6:00 PM:
+      * Objetivo: 2 pods
+      * Escala hacia arriba si CPU > 70% o Memoria > 70%
+      * Nunca baja de 2 pods
+    
+    - Durante 6:00 PM - 5:10 PM:
+      * Objetivo: 3 pods
+      * Escala hacia arriba si CPU > 70% o Memoria > 70%
+      * Nunca baja de 3 pods durante este periodo
+    
+    - Puede escalar hasta 10 pods si la demanda lo requiere
+    - Escala hacia arriba rápidamente (sin espera)
+    - Escala hacia abajo lentamente (5 minutos de estabilidad)
+  
+  timezone: "America/Bogota"
+  downscale-hours: "17:10 - 18:00"
+  upscale-hours: "18:00 - 17:10"
+  min-replicas-downscale: "2"
+  min-replicas-upscale: "3"
+  max-replicas: "10"
+  cpu-threshold: "70%"
+  memory-threshold: "70%"
