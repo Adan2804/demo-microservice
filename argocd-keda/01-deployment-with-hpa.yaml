@@ -1,0 +1,69 @@
+# Deployment para escalado con KEDA
+# Copia del deployment de producción pero preparado para HPA
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-microservice-keda
+  namespace: default
+  labels:
+    app: demo-microservice-keda
+    version: stable
+    managed-by: argocd-keda
+spec:
+  replicas: 3
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 900
+  selector:
+    matchLabels:
+      app: demo-microservice-keda
+      version: stable
+  template:
+    metadata:
+      labels:
+        app: demo-microservice-keda
+        version: stable
+        sidecar.istio.io/inject: "true"
+    spec:
+      containers:
+      - name: demo-microservice
+        image: zadan04/demo-microservice:stable
+        imagePullPolicy: IfNotPresent
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 15"]
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: SERVER_PORT
+          value: "8080"
+        - name: APP_VERSION
+          value: "stable-v1.0.0-keda"
+        - name: ENVIRONMENT
+          value: "production-keda"
+        - name: EXPERIMENT_ENABLED
+          value: "false"
+        - name: ISTIO_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 5

@@ -1,0 +1,71 @@
+# ScaledObject para escalado inteligente con KEDA
+# Horarios: 5:10 PM - 6:00 PM (2 pods), resto del día (3 pods)
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: demo-microservice-keda-scaler
+  namespace: default
+  labels:
+    app: demo-microservice-keda
+    scaling-strategy: intelligent
+    managed-by: argocd-keda
+  annotations:
+    scaledobject.keda.sh/transfer-hpa-ownership: "true"
+    description: "Escalado inteligente - 2 pods (5:10PM-6PM), 3 pods (resto)"
+spec:
+  scaleTargetRef:
+    name: demo-microservice-keda
+  
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  
+  pollingInterval: 30
+  cooldownPeriod: 300
+  
+  triggers:
+    # Downscale: 5:10 PM - 6:00 PM
+    - type: cron
+      metadata:
+        timezone: "America/Bogota"
+        start: "40 17 * * *"
+        end: "0 18 * * *"
+        desiredReplicas: "2"
+    
+    # Upscale: 6:00 PM - 5:10 PM
+    - type: cron
+      metadata:
+        timezone: "America/Bogota"
+        start: "0 18 * * *"
+        end: "40 17 * * *"
+        desiredReplicas: "3"
+    
+    # Escalado por CPU
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "70"
+    
+    # Escalado por Memoria
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "70"
+  
+  advanced:
+    horizontalPodAutoscalerConfig:
+      name: demo-microservice-keda-hpa
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 2
+              periodSeconds: 60
+          selectPolicy: Max
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 180
+          selectPolicy: Min

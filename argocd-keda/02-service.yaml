@@ -1,0 +1,19 @@
+# Service para el deployment con KEDA
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-microservice-keda
+  namespace: default
+  labels:
+    app: demo-microservice-keda
+    service: demo-microservice-keda
+    managed-by: argocd-keda
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: demo-microservice-keda
+  type: ClusterIP
