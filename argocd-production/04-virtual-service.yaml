@@ -14,8 +14,7 @@ spec:
   - demo-microservice-gateway
   http:
   # Regla 1: A/B Testing - Tráfico con header específico va al experimento
-  # Cuando hay Argo Experiment activo, usa el service del experiment
-  # Cuando no hay experiment, esta regla falla gracefully y pasa a la siguiente
+  # Usa el mismo service pero con subset "experiment"
   - name: experiment-routing
     match:
     - headers:
@@ -23,9 +22,8 @@ spec:
           exact: "123e4567-e89b-12d3-a456-42661417400"
     route:
     - destination:
-        host: demo-microservice-experiment-experiment.default.svc.cluster.local
-        port:
-          number: 80
+        host: demo-microservice-istio.default.svc.cluster.local
+        subset: experiment
       weight: 100
     headers:
       response:
