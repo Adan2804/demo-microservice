@@ -6,13 +6,20 @@ metadata:
   labels:
     app: demo-microservice-istio
     experiment-type: ab-testing
+  annotations:
+    # Evitar que ArgoCD intente gestionar este recurso
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   duration: 24h
   progressDeadlineSeconds: 86400  # 24 horas en segundos
+  scaleDownDelaySeconds: 30
   
   templates:
-  # Solo template para versión experimental (nueva versión)
-  # La versión stable ya está corriendo en producción (gestionada por ArgoCD)
+  # Template para versión experimental
+  # Los pods tendrán los labels necesarios para:
+  # 1. Ser seleccionados por el service demo-microservice-istio (label: app=demo-microservice-istio)
+  # 2. Ser identificados por el DestinationRule subset "experiment" (labels: experiment=ab-test, version=experiment)
   - name: experiment
     replicas: 1
     selector:
@@ -23,10 +30,11 @@ spec:
     template:
       metadata:
         labels:
-          app: demo-microservice-istio
-          experiment: ab-test
-          version: experiment
-          sidecar.istio.io/inject: "true"
+          app: demo-microservice-istio  # IMPORTANTE: Para que el service lo seleccione
+          experiment: ab-test            # IMPORTANTE: Para el DestinationRule subset
+          version: experiment            # IMPORTANTE: Para el DestinationRule subset
+        annotations:
+          sidecar.istio.io/inject: "true"  # Inyectar Istio sidecar
       spec:
         containers:
         - name: demo-microservice

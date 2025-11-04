@@ -34,10 +34,11 @@ spec:
           maxConnections: 50
   
   # Subset para pods experimentales (Argo Experiment)
+  # Estos pods son creados dinámicamente por el Experiment
   - name: experiment
     labels:
       app: demo-microservice-istio
-      experiment: ab-test           # Label del Argo Experiment
+      experiment: ab-test
       version: experiment
     trafficPolicy:
       connectionPool:

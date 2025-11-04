@@ -57,35 +57,34 @@ spec:
       perTryTimeout: 10s
 
 ---
-# VirtualService para mesh interno
+# VirtualService para mesh interno (tráfico entre servicios)
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   name: demo-microservice-mesh-routing
   namespace: default
   labels:
-    experiment-active: "true"
+    experiment-active: "false"
 spec:
   hosts:
   - demo-microservice-istio.default.svc.cluster.local
   gateways:
   - mesh
   http:
-  # Todo el tráfico interno va al experimento
+  # Tráfico interno va a stable por defecto
   - match:
     - uri:
         prefix: "/"
     route:
     - destination:
         host: demo-microservice-istio.default.svc.cluster.local
-        subset: experimental
+        subset: stable
       weight: 100
     headers:
       response:
         add:
-          x-routed-to: "experiment-candidate"
-          x-istio-routing: "mesh-config"
-          x-experiment-status: "active"
+          x-routed-to: "production-stable"
+          x-istio-routing: "mesh-internal"
     timeout: 30s
     retries:
       attempts: 2

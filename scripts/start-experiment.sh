@@ -31,16 +31,35 @@ echo "🧹 LIMPIANDO EXPERIMENTOS ANTERIORES..."
 kubectl delete experiment demo-microservice-experiment --ignore-not-found=true
 sleep 2
 
-# 3. Crear el experimento
+# 3. Verificar que el deployment de producción esté corriendo
+echo ""
+echo "🔍 VERIFICANDO DEPLOYMENT DE PRODUCCIÓN..."
+if ! kubectl get deployment demo-microservice-production-istio >/dev/null 2>&1; then
+    echo "❌ El deployment de producción no existe. Ejecuta primero:"
+    echo "   ./scripts/03-setup-argocd.sh"
+    exit 1
+fi
+echo "✅ Deployment de producción encontrado"
+
+# 4. Verificar que el service exista
+echo ""
+echo "🔍 VERIFICANDO SERVICE EXISTENTE..."
+if ! kubectl get svc demo-microservice-istio >/dev/null 2>&1; then
+    echo "❌ El service demo-microservice-istio no existe"
+    exit 1
+fi
+echo "✅ Service demo-microservice-istio encontrado"
+
+# 5. Crear el experimento
 echo ""
 echo "🚀 DESPLEGANDO EXPERIMENTO..."
 kubectl apply -f experiments/experiment-deployment.yaml
 
 echo ""
 echo "⏳ ESPERANDO QUE EL EXPERIMENTO ESTÉ LISTO..."
-sleep 10
+sleep 15
 
-# 4. Verificar estado del experimento
+# 6. Verificar estado del experimento
 echo ""
 echo "📊 ESTADO DEL EXPERIMENTO:"
 kubectl get experiment demo-microservice-experiment
@@ -50,14 +69,14 @@ echo "📦 PODS DEL EXPERIMENTO:"
 kubectl get pods -l experiment=ab-test
 
 echo ""
-echo "🌐 SERVICES CREADOS POR EL EXPERIMENT:"
-kubectl get svc | grep experiment || echo "Services aún no creados, esperando..."
+echo "🌐 SERVICE UNIFICADO (selecciona ambos: stable + experiment):"
+kubectl get svc demo-microservice-istio
 
 echo ""
-echo "✅ VirtualService de ArgoCD ya está configurado para A/B testing"
-echo "   (El VirtualService apunta a: demo-microservice-experiment-experiment)"
+echo "🔍 ENDPOINTS DEL SERVICE (debe incluir pods stable + experiment):"
+kubectl get endpoints demo-microservice-istio -o jsonpath='{.subsets[*].addresses[*].targetRef.name}' && echo ""
 
-# 6. Esperar propagación
+# 7. Esperar propagación de Istio
 echo ""
 echo "⏳ Esperando propagación de configuración de Istio..."
 sleep 10
