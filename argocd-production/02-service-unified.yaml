@@ -17,7 +17,7 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app: demo-microservice-istio  # Selector específico para pods Istio
+    app: demo-microservice-istio  # Selecciona tanto producción como experimento  # Selector específico para pods Istio
   type: ClusterIP
 
 ---

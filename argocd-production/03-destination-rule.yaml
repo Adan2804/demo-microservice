@@ -33,10 +33,11 @@ spec:
         tcp:
           maxConnections: 50
   
-  # Subset para pods experimentales (A/B Testing)
+  # Subset para pods experimentales (Argo Experiment)
   - name: experiment
     labels:
       app: demo-microservice-istio
+      experiment: ab-test           # Label del Argo Experiment
       version: experiment
     trafficPolicy:
       connectionPool:
