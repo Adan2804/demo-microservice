@@ -19,20 +19,20 @@ spec:
   # Template para versión experimental
   # Los pods tendrán los labels necesarios para:
   # 1. Ser seleccionados por el service demo-microservice-istio (label: app=demo-microservice-istio)
-  # 2. Ser identificados por el DestinationRule subset "experiment" (labels: experiment=ab-test, version=experiment)
+  # 2. Ser identificados por el DestinationRule subset "experiment" (labels: tier=experiment, version=experimental)
   - name: experiment
     replicas: 1
     selector:
       matchLabels:
         app: demo-microservice-istio
-        experiment: ab-test
-        version: experiment
+        tier: experiment
+        version: experimental
     template:
       metadata:
         labels:
           app: demo-microservice-istio  # IMPORTANTE: Para que el service lo seleccione
-          experiment: ab-test            # IMPORTANTE: Para el DestinationRule subset
-          version: experiment            # IMPORTANTE: Para el DestinationRule subset
+          tier: experiment               # IMPORTANTE: Para el DestinationRule subset
+          version: experimental          # IMPORTANTE: Para el DestinationRule subset
         annotations:
           sidecar.istio.io/inject: "true"  # Inyectar Istio sidecar
       spec:

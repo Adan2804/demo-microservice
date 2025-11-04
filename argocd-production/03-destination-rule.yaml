@@ -38,8 +38,8 @@ spec:
   - name: experiment
     labels:
       app: demo-microservice-istio
-      experiment: ab-test
-      version: experiment
+      tier: experiment
+      version: experimental
     trafficPolicy:
       connectionPool:
         tcp:
