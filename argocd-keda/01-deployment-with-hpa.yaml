@@ -12,7 +12,13 @@ metadata:
 spec:
   replicas: 3
   revisionHistoryLimit: 2
-  progressDeadlineSeconds: 900
+  progressDeadlineSeconds: 600  # 10 minutos para completar el rolling update
+  minReadySeconds: 10           # Esperar 10s antes de considerar el pod ready
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0         # NUNCA 0 pods disponibles (ZERO DOWNTIME)
+      maxSurge: 1               # Permite 1 pod extra durante actualización
   selector:
     matchLabels:
       app: demo-microservice-keda
@@ -24,6 +30,7 @@ spec:
         version: stable
         sidecar.istio.io/inject: "true"
     spec:
+      terminationGracePeriodSeconds: 30  # Tiempo para terminar correctamente
       containers:
       - name: demo-microservice
         image: zadan04/demo-microservice:stable
@@ -31,10 +38,11 @@ spec:
         lifecycle:
           preStop:
             exec:
-              command: ["/bin/sh", "-c", "sleep 15"]
+              command: ["/bin/sh", "-c", "sleep 15"]  # Graceful shutdown
         ports:
         - containerPort: 8080
           name: http
+          protocol: TCP
         env:
         - name: SERVER_PORT
           value: "8080"
@@ -57,13 +65,18 @@ spec:
           httpGet:
             path: /actuator/health
             port: 8080
+            scheme: HTTP
           initialDelaySeconds: 30
-          periodSeconds: 10
+          periodSeconds: 5          # Verificar cada 5 segundos
           timeoutSeconds: 5
+          successThreshold: 2       # Debe pasar 2 veces seguidas
+          failureThreshold: 3
         livenessProbe:
           httpGet:
             path: /actuator/health
             port: 8080
+            scheme: HTTP
           initialDelaySeconds: 60
           periodSeconds: 15
           timeoutSeconds: 5
+          failureThreshold: 3

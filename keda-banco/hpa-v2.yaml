@@ -1,0 +1,54 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: #{service}#-hpa
+  namespace: #{namespace}#
+  labels:
+    app.bancolombia.com.co/env: "#{env}#"
+    app.bancolombia.com.co/cost-center: "#{cost-center}#"
+    app.bancolombia.com.co/application-code: "#{application-code}#"
+    app.bancolombia.com.co/project: "#{project-name}#"
+    app.bancolombia.com.co/pmo: "#{pmo}#"
+    app.bancolombia.com.co/dt-release-version: #{dt-release-version}#
+    app.bancolombia.com.co/dt-build-version: #{dt-build-version}#
+    app.bancolombia.com.co/dt-release-product: #{dt-release-product}#
+    app.bancolombia.com.co/dt-release-stage: #{dt-release-stage}#
+    app.bancolombia.com.co/responsible: #{work-team}#
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: #{service}#-deployment
+  minReplicas: #{replicas}# 
+  maxReplicas: #{replicas-max}# 
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: #{cpu-utilization-percentage}#
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: #{memory-utilization-percentage}#
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: #{hpa-scaleup-type}#
+          value: #{hpa-stabilization-upscaling-value}#
+          periodSeconds: #{hpa-period-upscaling-seconds}#
+    scaleDown:
+      stabilizationWindowSeconds: #{hpa-stabilization-window-seconds}#
+      policies:
+        - type: #{hpa-scaledown-type}#
+          value: #{hpa-stabilization-downscaling-value}#
+          periodSeconds: #{hpa-period-downscaling-seconds}#
+status:
+  currentReplicas: #{replicas}#
+  desiredReplicas: #{replicas}#
+
+

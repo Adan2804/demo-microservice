@@ -1,0 +1,57 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: demo-microservice-intelligent-downscale
+  namespace: default
+  labels:
+    app: demo-microservice-istio
+    scaling-strategy: intelligent
+    managed-by: argocd-production
+  annotations:
+    scaledobject.keda.sh/transfer-hpa-ownership: "true"
+    description: "Downscale a 2 pods (5:55PM-6:00PM) y 3 pods resto"
+spec:
+  scaleTargetRef:
+    name: demo-microservice-production-istio
+
+  minReplicaCount: 2
+  maxReplicaCount: 10
+
+  pollingInterval: 10     # Evalúa cada 10 segundos
+  cooldownPeriod: 30      # Espera 30 segundos antes de escalar
+
+  triggers:
+    # Downscale: 5:55 PM - 6:00 PM → 2 pods
+    - type: cron
+      metadata:
+        timezone: "America/Bogota"
+        start: "55 17 * * *"
+        end: "0 18 * * *"
+        desiredReplicas: "2"
+
+    # Upscale: 6:00 PM - 5:55 PM → 3 pods
+    - type: cron
+      metadata:
+        timezone: "America/Bogota"
+        start: "0 18 * * *"
+        end: "55 17 * * *"
+        desiredReplicas: "3"
+
+  advanced:
+    horizontalPodAutoscalerConfig:
+      name: demo-microservice-intelligent-hpa
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Pods
+              value: 2
+              periodSeconds: 30
+          selectPolicy: Max
+        scaleDown:
+          policies:
+            - type: Pods
+              value: 1
+              periodSeconds: 30
+          selectPolicy: Max
+          stabilizationWindowSeconds: 30

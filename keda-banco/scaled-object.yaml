@@ -1,0 +1,59 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  annotations:
+    scaledobject.keda.sh/transfer-hpa-ownership: 'true'
+  name: #{service}#-scaled-object
+  namespace: #{namespace}#
+  labels:
+    app.bancolombia.com.co/env: #{env}#
+    app.bancolombia.com.co/cost-center: #{cost-center}#
+    app.bancolombia.com.co/application-code: #{application-code}#
+    app.bancolombia.com.co/project: #{project-name}#
+    app.bancolombia.com.co/pmo: #{pmo}#
+    app.bancolombia.com.co/dt-release-version: #{dt-release-version}#
+    app.bancolombia.com.co/dt-build-version: #{dt-build-version}#
+    app.bancolombia.com.co/dt-release-product: #{dt-release-product}#
+    app.bancolombia.com.co/dt-release-stage: #{dt-release-stage}#
+    app.bancolombia.com.co/responsible: #{work-team}#
+spec:
+  maxReplicaCount: #{replicas-max}#
+  minReplicaCount: #{replicas}#
+  scaleTargetRef:
+    name: #{service}#-deployment
+  pollingInterval: #{polling-interval}#
+  cooldownPeriod: #{cooldown-period}#
+  triggers:
+    # Downscale: Horario de baja demanda → mínimo de pods
+    - type: cron
+      metadata:
+        timezone: "#{timezone}#"
+        start: "#{cron-downscale-start}#"
+        end: "#{cron-downscale-end}#"
+        desiredReplicas: "#{replicas-downscale}#"
+    
+    # Upscale: Horario de alta demanda → más pods
+    - type: cron
+      metadata:
+        timezone: "#{timezone}#"
+        start: "#{cron-upscale-start}#"
+        end: "#{cron-upscale-end}#"
+        desiredReplicas: "#{replicas-upscale}#"
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          policies:
+            - periodSeconds: #{hpa-period-downscaling-seconds}#
+              type: Pods
+              value: #{hpa-stabilization-downscaling-value}#
+          selectPolicy: Max
+          stabilizationWindowSeconds: #{hpa-stabilization-window-seconds}#
+        scaleUp:
+          policies:
+            - periodSeconds: #{hpa-period-upscaling-seconds}#
+              type: Pods
+              value: #{hpa-stabilization-upscaling-value}#
+          selectPolicy: Max
+          stabilizationWindowSeconds: 0
+      name: #{service}#-hpa

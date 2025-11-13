@@ -1,0 +1,21 @@
+# PodDisruptionBudget para garantizar zero downtime
+# Asegura que siempre haya al menos 1 pod disponible durante:
+# - Rolling updates
+# - Syncs de ArgoCD
+# - Escalado de KEDA
+# - Mantenimiento del cluster
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: demo-microservice-keda-pdb
+  namespace: default
+  labels:
+    app: demo-microservice-keda
+    managed-by: argocd-keda
+    purpose: zero-downtime
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: demo-microservice-keda
+      version: stable

@@ -16,14 +16,14 @@ spec:
   scaleTargetRef:
     name: demo-microservice-keda
   
-  minReplicaCount: 2
+  minReplicaCount: 2      # NUNCA menos de 2 pods (ZERO DOWNTIME)
   maxReplicaCount: 10
   
   pollingInterval: 10     # Evalúa cada 10 segundos
-  cooldownPeriod: 30      # Espera 30 segundos antes de escalar
+  cooldownPeriod: 30      # Espera 30 segundos antes de escalar hacia abajo
   
   triggers:
-    # Downscale: 5:40 PM - 6:00 PM → 2 pods
+    # Downscale: 5:55 PM - 6:00 PM → 2 pods (mínimo)
     - type: cron
       metadata:
         timezone: "America/Bogota"
@@ -31,7 +31,7 @@ spec:
         end: "0 18 * * *"
         desiredReplicas: "2"
     
-    # Upscale: 6:00 PM - 5:40 PM → 3 pods
+    # Upscale: 6:00 PM - 5:55 PM → 3 pods (normal)
     - type: cron
       metadata:
         timezone: "America/Bogota"
@@ -44,16 +44,16 @@ spec:
       name: demo-microservice-keda-hpa
       behavior:
         scaleUp:
-          stabilizationWindowSeconds: 0
+          stabilizationWindowSeconds: 0  # Escalar rápido hacia arriba
           policies:
             - type: Pods
-              value: 2
+              value: 2                    # Agregar 2 pods por período
               periodSeconds: 30
           selectPolicy: Max
         scaleDown:
-          stabilizationWindowSeconds: 30
+          stabilizationWindowSeconds: 30  # Esperar 30s antes de escalar hacia abajo
           policies:
             - type: Pods
-              value: 1
+              value: 1                     # Remover 1 pod por período (gradual)
               periodSeconds: 30
           selectPolicy: Min
