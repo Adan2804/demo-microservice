@@ -72,6 +72,16 @@ sleep 5
 echo ""
 echo "📝 CREANDO APLICACIÓN DE ARGOCD PARA KEDA (ZERO DOWNTIME)..."
 
+# Detectar si estamos en un repositorio git
+GIT_REPO_URL=""
+if git remote get-url origin >/dev/null 2>&1; then
+    GIT_REPO_URL=$(git remote get-url origin)
+    echo "📦 Repositorio Git detectado: $GIT_REPO_URL"
+else
+    echo "⚠️  No se detectó repositorio Git. Usando repositorio por defecto."
+    GIT_REPO_URL="https://github.com/Adan2804/demo-microservice.git"
+fi
+
 cat > /tmp/argocd-keda-app.yaml << EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -88,7 +98,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: 'https://github.com/Adan2804/demo-microservice.git'
+    repoURL: '$GIT_REPO_URL'
     path: argocd-keda
     targetRevision: HEAD
   destination:
@@ -136,9 +146,34 @@ sleep 15
 # 5. Forzar sync inicial
 echo ""
 echo "🔄 FORZANDO SINCRONIZACIÓN INICIAL..."
-kubectl patch application demo-microservice-keda -n argocd --type merge -p '{"operation":{"sync":{"revision":"HEAD"}}}'
+kubectl patch application demo-microservice-keda -n argocd --type merge -p '{"operation":{"sync":{"revision":"HEAD"}}}' 2>/dev/null || true
 
 sleep 10
+
+# Verificar si el sync fue exitoso
+SYNC_STATUS=$(kubectl get application demo-microservice-keda -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
+
+if [ "$SYNC_STATUS" != "Synced" ]; then
+    echo "⚠️  ArgoCD no pudo sincronizar desde el repositorio"
+    echo ""
+    read -p "¿Deseas aplicar los manifiestos directamente? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "📦 Aplicando manifiestos directamente..."
+        kubectl apply -f argocd-keda/01-deployment-with-hpa.yaml
+        kubectl apply -f argocd-keda/02-service.yaml
+        kubectl apply -f argocd-keda/04-pdb.yaml
+        kubectl apply -f argocd-keda/03-scaled-object.yaml
+        echo "✅ Manifiestos aplicados directamente"
+        
+        # Actualizar la aplicación para que use el cluster local
+        echo "📝 Configurando ArgoCD para usar manifiestos locales..."
+        kubectl delete application demo-microservice-keda -n argocd --ignore-not-found=true
+        
+        echo "💡 NOTA: Los recursos están desplegados pero no gestionados por ArgoCD"
+        echo "   Para gestión con ArgoCD, asegúrate de que el repositorio sea accesible"
+    fi
+fi
 
 # 6. Verificar estado
 echo ""

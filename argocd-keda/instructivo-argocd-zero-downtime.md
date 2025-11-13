@@ -120,11 +120,21 @@ spec:
 ```
 
 El script configura automáticamente:
+- ✅ Instala ArgoCD si no está instalado
 - ✅ Application de ArgoCD con Zero Downtime
 - ✅ ignoreDifferences para réplicas (KEDA las gestiona)
 - ✅ Auto-sync y self-heal
 - ✅ Retry con backoff exponencial
+- ✅ Port-forward para ArgoCD (puerto 8081)
+- ✅ Port-forward para el microservicio (puerto 8082)
 - ✅ Script de monitoreo
+- ✅ Muestra credenciales de acceso
+
+**Después de ejecutar el script:**
+- ArgoCD UI: https://localhost:8081
+- Microservicio: http://localhost:8082/actuator/health
+- Usuario ArgoCD: admin
+- Password: (mostrado al final del script)
 
 ## 📋 Pasos para Pruebas en ArgoCD-KEDA
 
