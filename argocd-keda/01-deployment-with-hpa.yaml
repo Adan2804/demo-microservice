@@ -33,7 +33,7 @@ spec:
       terminationGracePeriodSeconds: 30  # Tiempo para terminar correctamente
       containers:
       - name: demo-microservice
-        image: zadan04/demo-microservice:stable
+        image: zadan04/demo-microservice:experiment
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
