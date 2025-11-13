@@ -208,6 +208,34 @@ READY:.status.readyReplicas \
         awk '{printf "│ Desired: %-3s │ Current: %-3s │ Updated: %-3s │ Available: %-3s │ Ready: %-3s │\n", $1, $2, $3, $4, $5}'
     echo -e "└────────────────────────────────────────────────────────────────────────────────────────────────────┘"
     
+    # Probar conectividad a la API
+    echo ""
+    echo -e "${YELLOW}🌐 PRUEBA DE CONECTIVIDAD API:${NC}"
+    echo -e "┌────────────────────────────────────────────────────────────────────────────────────────────────────┐"
+    
+    API_URL="http://127.0.0.1:39561/demo/info"
+    API_RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 2 --max-time 3 "$API_URL" 2>/dev/null)
+    HTTP_CODE=$(echo "$API_RESPONSE" | tail -n1)
+    API_BODY=$(echo "$API_RESPONSE" | sed '$d')
+    
+    if [ "$HTTP_CODE" = "200" ]; then
+        # Extraer versión de la respuesta JSON
+        VERSION=$(echo "$API_BODY" | grep -o '"version":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "unknown")
+        echo -e "│ ${GREEN}✅ API Responde: HTTP $HTTP_CODE${NC}"
+        echo -e "│ ${GREEN}   Versión: $VERSION${NC}"
+        
+        # Mostrar respuesta completa (primera línea)
+        FIRST_LINE=$(echo "$API_BODY" | head -c 90)
+        echo -e "│ ${CYAN}   Response: $FIRST_LINE...${NC}"
+    elif [ -z "$HTTP_CODE" ] || [ "$HTTP_CODE" = "000" ]; then
+        echo -e "│ ${RED}❌ API No Responde: Connection refused o timeout${NC}"
+        echo -e "│ ${YELLOW}   ⚠️  Posible downtime detectado en la API${NC}"
+    else
+        echo -e "│ ${YELLOW}⚠️  API Responde: HTTP $HTTP_CODE (no 200)${NC}"
+    fi
+    
+    echo -e "└────────────────────────────────────────────────────────────────────────────────────────────────────┘"
+    
     # Resultado final
     echo ""
     if [ "$had_zero_downtime" = true ]; then
@@ -218,6 +246,7 @@ READY:.status.readyReplicas \
     
     echo ""
     echo -e "${CYAN}Presiona Ctrl+C para detener el monitoreo${NC}"
+    echo -e "${CYAN}API URL: $API_URL${NC}"
     
     sleep 2
 done
