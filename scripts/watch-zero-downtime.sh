@@ -206,7 +206,7 @@ READY:.status.readyReplicas \
     echo -e "${YELLOW}PRUEBA DE CONECTIVIDAD API:${NC}"
 
     
-    API_URL="http://127.0.0.1:33233/demo/info"
+    API_URL="http://127.0.0.1:34023/demo/info"
     API_RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 2 --max-time 3 "$API_URL" 2>/dev/null)
     HTTP_CODE=$(echo "$API_RESPONSE" | tail -n1)
     API_BODY=$(echo "$API_RESPONSE" | sed '$d')

@@ -27,13 +27,13 @@ spec:
     metadata:
       labels:
         app: demo-microservice-keda
-        version: stable
+        version: canary
         sidecar.istio.io/inject: "true"
     spec:
       terminationGracePeriodSeconds: 30  # Tiempo para terminar correctamente
       containers:
       - name: demo-microservice
-        image: zadan04/demo-microservice:stable
+        image: zadan04/demo-microservice:experiment
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -47,11 +47,11 @@ spec:
         - name: SERVER_PORT
           value: "8080"
         - name: APP_VERSION
-          value: "stable-v1.0.0-keda"
+          value: "experiment-v1.0.0-keda"
         - name: ENVIRONMENT
           value: "production-keda"
         - name: EXPERIMENT_ENABLED
-          value: "false"
+          value: "true"
         - name: ISTIO_ENABLED
           value: "true"
         resources:
