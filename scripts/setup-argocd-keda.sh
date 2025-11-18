@@ -20,31 +20,23 @@ fi
 
 if ! kubectl get deployment argocd-server -n argocd >/dev/null 2>&1; then
     echo "⚠️  ArgoCD no está instalado"
-    echo ""
-    read -p "¿Deseas instalar ArgoCD ahora? (y/N): " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "📦 Instalando ArgoCD..."
-        
-        # Crear namespace
-        kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-        
-        # Instalar ArgoCD
-        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-        
-        echo "⏳ Esperando que ArgoCD esté listo..."
-        sleep 30
-        kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
-        kubectl wait --for=condition=available deployment/argocd-repo-server -n argocd --timeout=300s
-        
-        # Cambiar servicio a NodePort
-        kubectl patch svc argocd-server -n argocd -p '{"spec":{"type":"NodePort"}}'
-        
-        echo "✅ ArgoCD instalado correctamente"
-    else
-        echo "❌ ArgoCD es requerido. Ejecuta: ./scripts/03-setup-argocd.sh"
-        exit 1
-    fi
+    echo "📦 Instalando ArgoCD automáticamente..."
+    
+    # Crear namespace
+    kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+    
+    # Instalar ArgoCD
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    
+    echo "⏳ Esperando que ArgoCD esté listo (esto puede tomar 2-3 minutos)..."
+    sleep 30
+    kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
+    kubectl wait --for=condition=available deployment/argocd-repo-server -n argocd --timeout=300s
+    
+    # Cambiar servicio a NodePort
+    kubectl patch svc argocd-server -n argocd -p '{"spec":{"type":"NodePort"}}'
+    
+    echo "✅ ArgoCD instalado correctamente"
 fi
 
 if ! kubectl get namespace keda >/dev/null 2>&1; then
@@ -164,6 +156,8 @@ if [ "$SYNC_STATUS" != "Synced" ]; then
         kubectl apply -f argocd-keda/02-service.yaml
         kubectl apply -f argocd-keda/04-pdb.yaml
         kubectl apply -f argocd-keda/03-scaled-object.yaml
+        kubectl apply -f argocd-keda/05-destination-rule.yaml
+        kubectl apply -f argocd-keda/06-virtualservice-canary.yaml
         echo "✅ Manifiestos aplicados directamente"
         
         # Actualizar la aplicación para que use el cluster local
