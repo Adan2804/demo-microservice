@@ -12,13 +12,13 @@ metadata:
 spec:
   replicas: 3
   revisionHistoryLimit: 2
-  progressDeadlineSeconds: 600  # 10 minutos para completar el rolling update
-  minReadySeconds: 10           # Esperar 10s antes de considerar el pod ready
+  progressDeadlineSeconds: 900   # 15 minutos para completar
+  minReadySeconds: 10            # Esperar 10s antes de considerar el pod ready
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxUnavailable: 0         # NUNCA 0 pods disponibles (ZERO DOWNTIME)
-      maxSurge: 2               # Permite 2 pods extra para canary
+      maxUnavailable: 0          # NUNCA 0 pods disponibles (ZERO DOWNTIME)
+      maxSurge: 1                # Solo 1 pod nuevo a la vez
   selector:
     matchLabels:
       app: demo-microservice-keda
@@ -36,6 +36,11 @@ spec:
         image: zadan04/demo-microservice:stable
         imagePullPolicy: IfNotPresent
         lifecycle:
+          postStart:
+            exec:
+              # PAUSA DE 10 MINUTOS solo en el primer pod nuevo
+              # Permite probar con header antes de continuar rolling update
+              command: ["/bin/sh", "-c", "if [ ! -f /tmp/first-pod-done ]; then echo 'Primer pod - pausando 10 min para testing'; sleep 600; touch /tmp/first-pod-done; fi"]
           preStop:
             exec:
               command: ["/bin/sh", "-c", "sleep 15"]  # Graceful shutdown
@@ -67,9 +72,9 @@ spec:
             port: 8080
             scheme: HTTP
           initialDelaySeconds: 30
-          periodSeconds: 5          # Verificar cada 5 segundos
+          periodSeconds: 5
           timeoutSeconds: 5
-          successThreshold: 2       # Debe pasar 2 veces seguidas
+          successThreshold: 2
           failureThreshold: 3
         livenessProbe:
           httpGet:

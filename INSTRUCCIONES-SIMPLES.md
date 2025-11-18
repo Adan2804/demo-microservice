@@ -22,25 +22,28 @@ Edita `argocd-keda/01-deployment-with-hpa.yaml` y cambia:
 kubectl apply -f argocd-keda/01-deployment-with-hpa.yaml
 ```
 
-### 4. Probar
+**El primer pod nuevo se pausará automáticamente 10 minutos** para que puedas probarlo.
+
+### 4. Probar (tienes 10 minutos)
 
 **Tráfico normal (va a pods stable):**
 ```bash
 curl http://192.168.49.2:32647/actuator/info
 ```
 
-**Tráfico de prueba (va a pods canary):**
+**Tráfico de prueba (va al pod canary nuevo):**
 ```bash
 curl -H "x-test-new: true" http://192.168.49.2:32647/actuator/info
 ```
 
-### 5. Cuando todo esté OK
+### 5. Después de 10 minutos
 
-Cambia todos los pods a la nueva versión:
-- Edita el deployment
-- Cambia `version: canary` → `version: stable`
-- Cambia la imagen a la versión final
-- Aplica
+El rolling update continúa automáticamente y reemplaza todos los pods.
+
+**Si quieres cancelar:**
+```bash
+kubectl rollout undo deployment/demo-microservice-keda -n default
+```
 
 ## Resumen
 
