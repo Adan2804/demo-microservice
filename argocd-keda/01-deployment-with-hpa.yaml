@@ -27,7 +27,7 @@ spec:
     metadata:
       labels:
         app: demo-microservice-keda
-        version: canary
+        version: stable
         sidecar.istio.io/inject: "true"
     spec:
       terminationGracePeriodSeconds: 30  # Tiempo para terminar correctamente
