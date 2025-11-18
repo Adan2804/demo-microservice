@@ -30,12 +30,7 @@ spec:
       automountServiceAccountToken: true
       containers:
       - name: canary-controller
-        image: bitnami/kubectl:latest
-        env:
-        - name: KUBERNETES_SERVICE_HOST
-          value: "kubernetes.default.svc"
-        - name: KUBERNETES_SERVICE_PORT
-          value: "443"
+        image: bitnami/kubectl:1.32
         command:
           - /bin/bash
           - -c
@@ -43,17 +38,6 @@ spec:
             set -e
             
             echo "🚀 Canary Manager iniciado"
-            echo "Verificando acceso a API..."
-            
-            # Verificar conectividad
-            if ! kubectl version --short 2>/dev/null; then
-              echo "❌ No se puede conectar a la API de Kubernetes"
-              echo "Verificando ServiceAccount..."
-              ls -la /var/run/secrets/kubernetes.io/serviceaccount/ || true
-              exit 1
-            fi
-            
-            echo "✅ Conexión a API exitosa"
             echo "Esperando primer pod nuevo READY..."
             
             # Función para contar pods READY
