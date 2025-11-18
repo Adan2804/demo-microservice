@@ -1,14 +1,16 @@
-# Job para gestionar VirtualService temporal durante rolling update
+# Job DESHABILITADO - Usar VirtualService manual en su lugar
 # 
-# FLUJO:
-# 1. Detecta cuando hay un pod nuevo READY (T+1min)
-# 2. Aplica VirtualService con routing por header
-# 3. Espera 10 minutos (periodo de prueba)
-# 4. Elimina VirtualService para permitir rolling update normal
+# El Job tiene problemas de conectividad con la API de Kubernetes en Minikube
+# 
+# ALTERNATIVA SIMPLE:
+# 1. Aplicar manualmente: kubectl apply -f 06-virtualservice-canary.yaml
+# 2. Hacer el cambio de imagen en el deployment
+# 3. Probar con header: curl -H "x-canary-test: true" http://...
+# 4. Después de 10 min, eliminar: kubectl delete -f 06-virtualservice-canary.yaml
 #
-# TRIGGER: Se ejecuta manualmente antes de hacer el deployment update
+# Este archivo está deshabilitado cambiando el kind a Job-DISABLED
 apiVersion: batch/v1
-kind: Job
+kind: Job-DISABLED
 metadata:
   name: canary-manager
   namespace: default
