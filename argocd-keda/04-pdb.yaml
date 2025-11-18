@@ -14,7 +14,7 @@ metadata:
     managed-by: argocd-keda
     purpose: zero-downtime
 spec:
-  minAvailable: 1
+  minAvailable: 2  # Siempre al menos 2 pod disponible
   selector:
     matchLabels:
       app: demo-microservice-keda

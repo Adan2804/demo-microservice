@@ -16,12 +16,10 @@ NC='\033[0m' # No Color
 DEPLOYMENT_NAME="demo-microservice-keda"
 NAMESPACE="default"
 
-echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║  🔍 MONITOR DE ZERO DOWNTIME EN TIEMPO REAL                   ║${NC}"
-echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+echo -e "${CYAN}  MONITOR DE ZERO DOWNTIME EN TIEMPO REAL                      ${NC}"
 
 echo ""
-echo -e "${YELLOW}📋 INSTRUCCIONES:${NC}"
+echo -e "${YELLOW}INSTRUCCIONES:${NC}"
 echo "1. Este script monitoreará los pods en tiempo real"
 echo "2. En otra terminal, ejecuta el cambio de imagen:"
 echo -e "   ${GREEN}kubectl set image deployment/$DEPLOYMENT_NAME demo-microservice=zadan04/demo-microservice:stable${NC}"
@@ -59,9 +57,7 @@ had_zero_downtime=true
 start_time=$(date +%s)
 
 echo ""
-echo -e "${CYAN}════════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}✅ MONITOREO INICIADO - Esperando cambios...${NC}"
-echo -e "${CYAN}════════════════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}[OK] MONITOREO INICIADO - Esperando cambios...${NC}"
 echo ""
 
 # Loop de monitoreo
@@ -72,10 +68,10 @@ while true; do
     current_time=$(date '+%H:%M:%S')
     elapsed=$(($(date +%s) - start_time))
     
-    echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║  🔍 MONITOR DE ZERO DOWNTIME - Iteración #$iteration${NC}"
-    echo -e "${CYAN}║  ⏱️  Tiempo: $current_time | Transcurrido: ${elapsed}s${NC}"
-    echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+
+    echo -e "${CYAN}  MONITOR DE ZERO DOWNTIME - Iteración #$iteration${NC}"
+    echo -e "${CYAN}  Tiempo: $current_time | Transcurrido: ${elapsed}s${NC}"
+
     
     # Contar pods por estado
     running=$(count_pods_by_status "Running")
@@ -95,27 +91,26 @@ while true; do
     
     # Mostrar resumen
     echo ""
-    echo -e "${YELLOW}📊 RESUMEN DE PODS:${NC}"
-    echo -e "┌─────────────────────────────────────────────────────────────┐"
+    echo -e "${YELLOW}RESUMEN DE PODS:${NC}"
+
     
     if [ "$running" -eq 0 ]; then
-        echo -e "│ ${RED}⚠️  Running:     $running${NC} ${RED}← DOWNTIME DETECTADO!${NC}"
+        echo -e "│ ${RED}[!] Running:     $running${NC} ${RED}<- DOWNTIME DETECTADO!${NC}"
     else
-        echo -e "│ ${GREEN}✅ Running:     $running${NC}"
+        echo -e "│ ${GREEN}[OK] Running:     $running${NC}"
     fi
     
-    echo -e "│ ${YELLOW}⏳ Pending:     $pending${NC}"
-    echo -e "│ ${MAGENTA}🔄 Terminating: $terminating${NC}"
-    echo -e "│ ${BLUE}📦 Total:       $total${NC}"
-    echo -e "│ ${CYAN}📉 Mínimo:      $min_running${NC}"
-    echo -e "└─────────────────────────────────────────────────────────────┘"
+    echo -e "│ ${YELLOW}[WAIT] Pending:     $pending${NC}"
+    echo -e "│ ${MAGENTA}[TERM] Terminating: $terminating${NC}"
+    echo -e "│ ${BLUE}[INFO] Total:       $total${NC}"
+    echo -e "│ ${CYAN}[MIN]  Mínimo:      $min_running${NC}"
     
     # Obtener detalles de pods
     echo ""
-    echo -e "${YELLOW}📋 DETALLE DE PODS:${NC}"
-    echo -e "┌────────────────────────────────────────────────────────────────────────────────────────────────────┐"
+    echo -e "${YELLOW}DETALLE DE PODS:${NC}"
+
     printf "│ %-35s │ %-10s │ %-5s │ %-8s │ %-20s │\n" "NOMBRE" "STATUS" "READY" "RESTARTS" "IMAGEN"
-    echo -e "├────────────────────────────────────────────────────────────────────────────────────────────────────┤"
+
     
     declare -A current_pods
     
@@ -133,9 +128,9 @@ while true; do
             # Detectar si es nuevo o cambió
             is_new=""
             if [ -z "${previous_pods[$name]}" ]; then
-                is_new="${GREEN}🆕${NC}"
+                is_new="${GREEN}[NEW]${NC}"
             elif [ "${previous_pods[$name]}" != "$status" ]; then
-                is_new="${YELLOW}🔄${NC}"
+                is_new="${YELLOW}[CHG]${NC}"
             fi
             
             # Colorear según estado
@@ -169,13 +164,11 @@ while true; do
         fi
     done < <(get_pod_details)
     
-    echo -e "└────────────────────────────────────────────────────────────────────────────────────────────────────┘"
-    
     # Detectar pods eliminados
     for pod in "${!previous_pods[@]}"; do
         if [ -z "${current_pods[$pod]}" ]; then
             short_name=$(echo "$pod" | sed 's/demo-microservice-keda-//')
-            echo -e "${RED}❌ Pod eliminado: $short_name${NC}"
+            echo -e "${RED}[DEL] Pod eliminado: $short_name${NC}"
         fi
     done
     
@@ -187,17 +180,17 @@ while true; do
     
     # Mostrar eventos recientes
     echo ""
-    echo -e "${YELLOW}📰 EVENTOS RECIENTES (últimos 5):${NC}"
-    echo -e "┌────────────────────────────────────────────────────────────────────────────────────────────────────┐"
+    echo -e "${YELLOW}EVENTOS RECIENTES (últimos 5):${NC}"
+
     kubectl get events -n $NAMESPACE --sort-by='.lastTimestamp' 2>/dev/null | \
         grep "$DEPLOYMENT_NAME" | tail -5 | \
         awk '{printf "│ %-98s │\n", substr($0, 1, 98)}'
-    echo -e "└────────────────────────────────────────────────────────────────────────────────────────────────────┘"
+
     
     # Mostrar estado del deployment
     echo ""
-    echo -e "${YELLOW}🎯 ESTADO DEL DEPLOYMENT:${NC}"
-    echo -e "┌────────────────────────────────────────────────────────────────────────────────────────────────────┐"
+    echo -e "${YELLOW}ESTADO DEL DEPLOYMENT:${NC}"
+
     kubectl get deployment $DEPLOYMENT_NAME -n $NAMESPACE -o custom-columns=\
 DESIRED:.spec.replicas,\
 CURRENT:.status.replicas,\
@@ -206,14 +199,14 @@ AVAILABLE:.status.availableReplicas,\
 READY:.status.readyReplicas \
 --no-headers 2>/dev/null | \
         awk '{printf "│ Desired: %-3s │ Current: %-3s │ Updated: %-3s │ Available: %-3s │ Ready: %-3s │\n", $1, $2, $3, $4, $5}'
-    echo -e "└────────────────────────────────────────────────────────────────────────────────────────────────────┘"
+
     
     # Probar conectividad a la API
     echo ""
-    echo -e "${YELLOW}🌐 PRUEBA DE CONECTIVIDAD API:${NC}"
-    echo -e "┌────────────────────────────────────────────────────────────────────────────────────────────────────┐"
+    echo -e "${YELLOW}PRUEBA DE CONECTIVIDAD API:${NC}"
+
     
-    API_URL="http://127.0.0.1:39561/demo/info"
+    API_URL="http://127.0.0.1:33233/demo/info"
     API_RESPONSE=$(curl -s -w "\n%{http_code}" --connect-timeout 2 --max-time 3 "$API_URL" 2>/dev/null)
     HTTP_CODE=$(echo "$API_RESPONSE" | tail -n1)
     API_BODY=$(echo "$API_RESPONSE" | sed '$d')
@@ -221,27 +214,26 @@ READY:.status.readyReplicas \
     if [ "$HTTP_CODE" = "200" ]; then
         # Extraer versión de la respuesta JSON
         VERSION=$(echo "$API_BODY" | grep -o '"version":"[^"]*"' | cut -d'"' -f4 2>/dev/null || echo "unknown")
-        echo -e "│ ${GREEN}✅ API Responde: HTTP $HTTP_CODE${NC}"
-        echo -e "│ ${GREEN}   Versión: $VERSION${NC}"
+        echo -e "│ ${GREEN}[OK] API Responde: HTTP $HTTP_CODE${NC}"
+        echo -e "│ ${GREEN}     Versión: $VERSION${NC}"
         
         # Mostrar respuesta completa (primera línea)
         FIRST_LINE=$(echo "$API_BODY" | head -c 90)
-        echo -e "│ ${CYAN}   Response: $FIRST_LINE...${NC}"
+        echo -e "│ ${CYAN}     Response: $FIRST_LINE...${NC}"
     elif [ -z "$HTTP_CODE" ] || [ "$HTTP_CODE" = "000" ]; then
-        echo -e "│ ${RED}❌ API No Responde: Connection refused o timeout${NC}"
-        echo -e "│ ${YELLOW}   ⚠️  Posible downtime detectado en la API${NC}"
+        echo -e "│ ${RED}[ERROR] API No Responde: Connection refused o timeout${NC}"
+        echo -e "│ ${YELLOW}        Posible downtime detectado en la API${NC}"
     else
-        echo -e "│ ${YELLOW}⚠️  API Responde: HTTP $HTTP_CODE (no 200)${NC}"
+        echo -e "│ ${YELLOW}[WARN] API Responde: HTTP $HTTP_CODE (no 200)${NC}"
     fi
     
-    echo -e "└────────────────────────────────────────────────────────────────────────────────────────────────────┘"
     
     # Resultado final
     echo ""
     if [ "$had_zero_downtime" = true ]; then
-        echo -e "${GREEN}✅ ZERO DOWNTIME: SÍ - Nunca hubo 0 pods running${NC}"
+        echo -e "${GREEN}[OK] ZERO DOWNTIME: SI - Nunca hubo 0 pods running${NC}"
     else
-        echo -e "${RED}❌ ZERO DOWNTIME: NO - Se detectó 0 pods running${NC}"
+        echo -e "${RED}[FAIL] ZERO DOWNTIME: NO - Se detectó 0 pods running${NC}"
     fi
     
     echo ""
