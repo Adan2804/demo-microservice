@@ -1,44 +1,36 @@
-# Deployment para escalado con KEDA
-# Copia del deployment de producción pero preparado para HPA
+# Deployment CANARY separado
+# Se despliega junto al stable para pruebas graduales
+# Usa label version: canary para diferenciarse
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: demo-microservice-keda
+  name: demo-microservice-keda-canary
   namespace: default
   labels:
     app: demo-microservice-keda
-    version: stable
+    version: canary
     managed-by: argocd-keda
+    deployment-type: canary
 spec:
-  replicas: 3
+  replicas: 1  # Solo 1 pod canary inicialmente
   revisionHistoryLimit: 2
-  progressDeadlineSeconds: 600  # 10 minutos para completar el rolling update
-  minReadySeconds: 10           # Esperar 10s antes de considerar el pod ready
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0         # NUNCA 0 pods disponibles (ZERO DOWNTIME)
-      maxSurge: 2               # Permite 2 pods extra para canary
   selector:
     matchLabels:
       app: demo-microservice-keda
-      version: stable
+      version: canary
   template:
     metadata:
       labels:
         app: demo-microservice-keda
-        version: stable
+        version: canary
         sidecar.istio.io/inject: "true"
     spec:
-      terminationGracePeriodSeconds: 30  # Tiempo para terminar correctamente
+      terminationGracePeriodSeconds: 30
       containers:
-      - name: demo-microservice-v2
-        image: zadan04/demo-microservice:stable
-        imagePullPolicy: IfNotPresent
-        lifecycle:
-          preStop:
-            exec:
-              command: ["/bin/sh", "-c", "sleep 15"]  # Graceful shutdown
+      - name: demo-microservice
+        image: zadan04/demo-microservice:experiment  # Versión canary
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
           name: http
@@ -47,11 +39,11 @@ spec:
         - name: SERVER_PORT
           value: "8080"
         - name: APP_VERSION
-          value: "stable-v1.0.0-keda"
+          value: "canary-experiment"
         - name: ENVIRONMENT
-          value: "production-keda"
+          value: "canary-test"
         - name: EXPERIMENT_ENABLED
-          value: "false"
+          value: "true"
         - name: ISTIO_ENABLED
           value: "true"
         resources:
@@ -65,17 +57,15 @@ spec:
           httpGet:
             path: /actuator/health
             port: 8080
-            scheme: HTTP
           initialDelaySeconds: 30
-          periodSeconds: 5          # Verificar cada 5 segundos
+          periodSeconds: 5
           timeoutSeconds: 5
-          successThreshold: 2       # Debe pasar 2 veces seguidas
+          successThreshold: 2
           failureThreshold: 3
         livenessProbe:
           httpGet:
             path: /actuator/health
             port: 8080
-            scheme: HTTP
           initialDelaySeconds: 60
           periodSeconds: 15
           timeoutSeconds: 5

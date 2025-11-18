@@ -1,0 +1,67 @@
+# CANARY DEPLOYMENT SIMPLIFICADO
+# Usa solo Istio VirtualService para routing por peso
+# Sin Jobs complejos, solo configuración de tráfico
+
+---
+# DestinationRule con subsets por versión
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: demo-microservice-keda-canary-dr
+  namespace: default
+  labels:
+    app: demo-microservice-keda
+    type: canary
+spec:
+  host: demo-microservice-keda.default.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 2
+    loadBalancer:
+      simple: LEAST_REQUEST
+  subsets:
+    - name: stable
+      labels:
+        version: stable
+    - name: canary
+      labels:
+        version: canary
+
+---
+# VirtualService para routing canary (10% tráfico a canary)
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: demo-microservice-keda-canary-vs
+  namespace: default
+  labels:
+    app: demo-microservice-keda
+    type: canary
+spec:
+  hosts:
+    - demo-microservice-keda.default.svc.cluster.local
+    - demo-microservice-keda
+  http:
+    - match:
+        - headers:
+            x-canary-test:
+              exact: "true"
+      route:
+        - destination:
+            host: demo-microservice-keda.default.svc.cluster.local
+            subset: canary
+          weight: 100
+    - route:
+        - destination:
+            host: demo-microservice-keda.default.svc.cluster.local
+            subset: stable
+          weight: 90
+        - destination:
+            host: demo-microservice-keda.default.svc.cluster.local
+            subset: canary
+          weight: 10
