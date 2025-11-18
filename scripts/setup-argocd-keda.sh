@@ -289,6 +289,15 @@ fi
 # Obtener password de ArgoCD
 ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d)
 
+# Obtener IP de Minikube
+MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+
+# Obtener NodePort de ArgoCD
+ARGOCD_NODEPORT=$(kubectl get svc argocd-server -n argocd -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "")
+
+# Obtener NodePort del microservicio
+MICRO_NODEPORT=$(kubectl get svc demo-microservice-keda -n default -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "")
+
 echo "✅ Port-forward de ArgoCD configurado (PID: $ARGOCD_PF_PID)"
 
 # 9. Resumen final
@@ -316,7 +325,10 @@ echo "• argocd-production → Aplicación principal (sin HPA)"
 echo "• argocd-keda → Escalado inteligente (con KEDA + Zero Downtime)"
 echo ""
 echo "🌐 ACCESO A ARGOCD:"
-echo "• URL: https://localhost:8081"
+echo "• URL (Port-forward): https://localhost:8081"
+if [ -n "$ARGOCD_NODEPORT" ]; then
+    echo "• URL (NodePort): https://${MINIKUBE_IP}:${ARGOCD_NODEPORT}"
+fi
 echo "• Usuario: admin"
 if [ -n "$ARGOCD_PASSWORD" ]; then
     echo "• Password: $ARGOCD_PASSWORD"
@@ -329,13 +341,21 @@ echo "• Port-forward activo (PID: $ARGOCD_PF_PID)"
 echo ""
 echo "🌐 ACCESO AL MICROSERVICIO:"
 if [ -n "$MICRO_PF_PID" ]; then
-    echo "• URL: http://localhost:8082"
-    echo "• Health: http://localhost:8082/actuator/health"
-    echo "• Info: http://localhost:8082/actuator/info"
+    echo "• URL (Port-forward): http://localhost:8082"
+    echo "• Health (Port-forward): http://localhost:8082/actuator/health"
+    echo "• Info (Port-forward): http://localhost:8082/actuator/info"
+    if [ -n "$MICRO_NODEPORT" ]; then
+        echo "• URL (NodePort): http://${MINIKUBE_IP}:${MICRO_NODEPORT}"
+        echo "• Health (NodePort): http://${MINIKUBE_IP}:${MICRO_NODEPORT}/actuator/health"
+        echo "• Info (NodePort): http://${MINIKUBE_IP}:${MICRO_NODEPORT}/actuator/info"
+    fi
     echo "• Port-forward activo (PID: $MICRO_PF_PID)"
 else
     echo "• Servicio aún no disponible. Espera unos segundos y ejecuta:"
     echo "  kubectl port-forward svc/demo-microservice-keda -n default 8082:8080"
+    if [ -n "$MICRO_NODEPORT" ]; then
+        echo "• O accede directamente vía NodePort: http://${MINIKUBE_IP}:${MICRO_NODEPORT}"
+    fi
 fi
 echo ""
 echo "📊 MONITOREO:"
@@ -374,7 +394,12 @@ echo "🧪 PROBAR EL MICROSERVICIO:"
 if [ -n "$MICRO_PF_PID" ]; then
     echo "• curl http://localhost:8082/actuator/health"
     echo "• curl http://localhost:8082/actuator/info"
-    echo "• Abrir en navegador: http://localhost:8082/actuator/health"
+    if [ -n "$MICRO_NODEPORT" ]; then
+        echo "• curl http://${MINIKUBE_IP}:${MICRO_NODEPORT}/actuator/health"
+        echo "• Abrir en navegador: http://${MINIKUBE_IP}:${MICRO_NODEPORT}/actuator/health"
+    else
+        echo "• Abrir en navegador: http://localhost:8082/actuator/health"
+    fi
 fi
 echo ""
 echo "🛑 DETENER PORT-FORWARDS:"
