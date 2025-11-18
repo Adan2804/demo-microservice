@@ -28,14 +28,14 @@ spec:
       metadata:
         timezone: "America/Bogota"
         start: "35 14 * * *"
-        end: " 0 18 * * *"
+        end: " 2 15 * * *"
         desiredReplicas: "2"
     
     # Upscale: 6:00 PM - 5:55 PM → 3 pods (normal)
     - type: cron
       metadata:
         timezone: "America/Bogota"
-        start: " 0 18 * * *"
+        start: " 2 15 * * *"
         end: "35 14 * * *"
         desiredReplicas: "3"
   
