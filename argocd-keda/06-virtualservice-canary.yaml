@@ -1,55 +1,27 @@
-# VirtualService TEMPORAL para pruebas con header durante rolling update
-# Este archivo será aplicado por el Job cuando detecte el primer pod nuevo
-# Y será eliminado después de 10 minutos para permitir el rolling update normal
-#
-# USO:
-#   curl -H "x-canary-test: true" http://demo-microservice-keda:8080/actuator/health
-#
-# IMPORTANTE: Este VirtualService NO debe estar aplicado permanentemente
-# Solo durante el periodo de prueba (T+1min a T+11min)
+# VirtualService SIMPLE - Routing por header
+# Header "x-test-new: true" → pods con version=canary
+# Sin header → pods con version=stable
+
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
-  name: demo-microservice-keda-canary
+  name: demo-microservice-keda-vs
   namespace: default
   labels:
     app: demo-microservice-keda
-    managed-by: canary-job
-    temporary: "true"
-  annotations:
-    description: "VirtualService temporal para pruebas con header x-canary-test"
-    auto-cleanup: "true"
-    cleanup-after: "10m"
 spec:
   hosts:
-    - demo-microservice-keda.default.svc.cluster.local
     - demo-microservice-keda
-  
   http:
-    # REGLA 1: Tráfico con header x-canary-test → pod NEW
     - match:
         - headers:
-            x-canary-test:
+            x-test-new:
               exact: "true"
       route:
         - destination:
-            host: demo-microservice-keda.default.svc.cluster.local
-            subset: new-version
-          weight: 100
-      timeout: 30s
-      retries:
-        attempts: 3
-        perTryTimeout: 10s
-        retryOn: 5xx,reset,connect-failure,refused-stream
-    
-    # REGLA 2: Tráfico normal (sin header) → pods OLD
+            host: demo-microservice-keda
+            subset: canary
     - route:
         - destination:
-            host: demo-microservice-keda.default.svc.cluster.local
-            subset: old-version
-          weight: 100
-      timeout: 30s
-      retries:
-        attempts: 3
-        perTryTimeout: 10s
-        retryOn: 5xx,reset,connect-failure,refused-stream
+            host: demo-microservice-keda
+            subset: stable

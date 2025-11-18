@@ -1,5 +1,4 @@
-# DestinationRule para identificar versiones durante rolling update
-# Permite enrutar tráfico a pods específicos (old vs new)
+# DestinationRule SIMPLE - Solo usa label "version"
 apiVersion: networking.istio.io/v1beta1
 kind: DestinationRule
 metadata:
@@ -7,33 +6,17 @@ metadata:
   namespace: default
   labels:
     app: demo-microservice-keda
-    managed-by: argocd-keda
 spec:
   host: demo-microservice-keda.default.svc.cluster.local
   trafficPolicy:
-    connectionPool:
-      tcp:
-        maxConnections: 100
-      http:
-        http1MaxPendingRequests: 50
-        http2MaxRequests: 100
-        maxRequestsPerConnection: 2
     loadBalancer:
       simple: LEAST_REQUEST
-    outlierDetection:
-      consecutiveErrors: 5
-      interval: 30s
-      baseEjectionTime: 30s
-      maxEjectionPercent: 50
   subsets:
-    # Subset para pods OLD (versión actual en producción)
-    - name: old-version
+    - name: stable
       labels:
+        app: demo-microservice-keda
         version: stable
-        pod-template-hash: ""  # Se llena automáticamente por ReplicaSet old
-    
-    # Subset para pods NEW (nueva versión en rolling update)
-    - name: new-version
+    - name: canary
       labels:
-        version: stable
-        pod-template-hash: ""  # Se llena automáticamente por ReplicaSet new
+        app: demo-microservice-keda
+        version: canary
