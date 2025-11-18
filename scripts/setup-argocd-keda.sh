@@ -101,7 +101,7 @@ spec:
     - CreateNamespace=true
     - PrunePropagationPolicy=foreground
     - RespectIgnoreDifferences=true
-    - ApplyOutOfSyncOnly=true
+    - Replace=true
     automated:
       prune: true
       selfHeal: true
